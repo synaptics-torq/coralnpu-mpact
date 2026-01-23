@@ -32,8 +32,6 @@ typedef struct {
   uint32_t itcm_start_address;  // Start address of the ITCM range.
   uint32_t itcm_length;         // Length of the ITCM range.
   uint32_t initial_misa_value;  // Initial value of the misa register.
-  uint32_t dtcm_start_address;  // Start address of the DTCM range.
-  uint32_t dtcm_length;         // Length of the DTCM range.
 } sim_config_t;
 
 #ifdef __cplusplus
@@ -49,6 +47,10 @@ int mpact_init();
 // mpact_init. If not called, the default configuration is used.
 // Return 0 on success, non-zero on failure.
 int mpact_config(sim_config_t* config_data);
+
+// Configure the MPACT simulator to allow LOAD/STORE access to a memory range.
+// Return 0 on success, non-zero on failure.
+int mpact_add_load_store_range(uint32_t start_address, uint32_t length);
 
 // Loads an ELF file into the simulation memory.
 // Return 0 on success, non-zero on failure.

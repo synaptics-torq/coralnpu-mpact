@@ -45,8 +45,11 @@
 
 namespace {
 using ::coralnpu::sim::CoralNPUV2State;
-using ::coralnpu::sim::CoralNPUV2StateFactory;
+using ::coralnpu::sim::CoralNPUV2StateConfig;
 using ::coralnpu::sim::CoralNPUV2UserDecoder;
+using ::coralnpu::sim::kCoralNPUV2DefaultDtcmLength;
+using ::coralnpu::sim::kCoralNPUV2DefaultDtcmStartAddress;
+using ::coralnpu::sim::kCoralNPUV2DefaultItcmStartAddress;
 using ::coralnpu::sim::kCoralnpuV2VectorByteLength;
 using ::mpact::sim::generic::DecoderInterface;
 using ::mpact::sim::generic::Instruction;
@@ -67,35 +70,47 @@ using ::mpact::sim::util::MemoryInterface;
 
 using HaltReason = ::mpact::sim::generic::CoreDebugInterface::HaltReason;
 
-constexpr uint32_t kCoralNPUV2DefaultInitialMisaValue =
-    (*::mpact::sim::riscv::RiscVXlen::RV32 << 30) |
-    *::mpact::sim::riscv::IsaExtension::kIntegerMulDiv |
-    *::mpact::sim::riscv::IsaExtension::kRVIBaseIsa |
-    *::mpact::sim::riscv::IsaExtension::kSinglePrecisionFp |
-    *::mpact::sim::riscv::IsaExtension::kVectorExtension;
-constexpr uint32_t kCoralNPUV2DefaultItcmStartAddress = 0;
-constexpr uint32_t kCoralNPUV2DefaultItcmLength = 0x2000;
-constexpr uint32_t kCoralNPUV2DefaultDtcmStartAddress = 0x10000;
-constexpr uint32_t kCoralNPUV2DefaultDtcmLength = 0x8000;
-
 class MpactHandle {
  public:
   MpactHandle()
       : memory_(std::make_unique<FlatDemandMemory>()),
         elf_loader_(std::make_unique<ElfProgramLoader>(memory_.get())) {}
 
-  void Init(sim_config_t* /*absl_nullable*/ config_data) {
+  void Init(sim_config_t* /*absl_nullable*/ cosim_config) {
     CHECK(!is_initialized_) << "[DPI] Init: is_initialized_ is already true.";
-    if (config_data != nullptr) {
-      state_ = CreateState(
-          memory_.get(), config_data->itcm_start_address,
-          config_data->itcm_length, config_data->initial_misa_value,
-          config_data->dtcm_start_address, config_data->dtcm_length);
-    } else {
-      state_ = CreateState(
-          memory_.get(), kCoralNPUV2DefaultItcmStartAddress,
-          kCoralNPUV2DefaultItcmLength, kCoralNPUV2DefaultInitialMisaValue,
-          kCoralNPUV2DefaultDtcmStartAddress, kCoralNPUV2DefaultDtcmLength);
+    CoralNPUV2StateConfig* state_config = nullptr;
+    if (cosim_config != nullptr) {
+      state_config = new CoralNPUV2StateConfig{
+          .itcm_start_address = cosim_config->itcm_start_address,
+          .itcm_length = cosim_config->itcm_length,
+          .initial_misa_value = cosim_config->initial_misa_value,
+      };
+    }
+    state_ = CreateCoralNPUV2State("CoralNPUV2", RiscVXlen::RV32, memory_.get(),
+                                   /*atomic_memory=*/nullptr, state_config);
+    if (!state_config) {
+      state_->AddLsuAccessRange(kCoralNPUV2DefaultDtcmStartAddress,
+                                kCoralNPUV2DefaultDtcmLength);
+    }
+    // Make sure the architectural and abi register aliases are added.
+    std::string reg_name;
+    for (int i = 0; i < 32; i++) {
+      reg_name = absl::StrCat(RiscVState::kXregPrefix, i);
+      [[maybe_unused]] RV32Register* xreg =
+          state_->AddRegister<RV32Register>(reg_name);
+      CHECK_OK(state_->AddRegisterAlias<RV32Register>(reg_name,
+                                                      kXRegisterAliases[i]));
+
+      reg_name = absl::StrCat(RiscVState::kFregPrefix, i);
+      [[maybe_unused]] RVFpRegister* freg =
+          state_->AddRegister<RVFpRegister>(reg_name);
+      CHECK_OK(state_->AddRegisterAlias<RVFpRegister>(reg_name,
+                                                      kFRegisterAliases[i]));
+
+      reg_name = absl::StrCat(RiscVState::kVregPrefix, i);
+      [[maybe_unused]] RVVectorRegister* vreg =
+          state_->AddRegister<RVVectorRegister>(reg_name,
+                                                kCoralnpuV2VectorByteLength);
     }
     rv_fp_state_ = CreateFPState(state_.get());
     state_->set_rv_fp(rv_fp_state_.get());
@@ -109,12 +124,15 @@ class MpactHandle {
       state_->Cease(inst);
       return true;
     });
-    uint32_t pc_value = config_data == nullptr
+    uint32_t pc_value = cosim_config == nullptr
                             ? kCoralNPUV2DefaultItcmStartAddress
-                            : config_data->itcm_start_address;
+                            : cosim_config->itcm_start_address;
     absl::Status pc_write = rv_top_->WriteRegister("pc", pc_value);
     CHECK_OK(pc_write) << "Error writing to pc.";
     is_initialized_ = true;
+    if (state_config) {
+      delete state_config;
+    }
   }
 
   absl::Status load_program(const std::string& elf_file) {
@@ -135,7 +153,7 @@ class MpactHandle {
 
   RiscVTop* rv_top() const { return rv_top_.get(); }
 
-  CoralNPUV2State* rv_state() const { return state_.get(); }
+  CoralNPUV2State* state() const { return state_.get(); }
 
   ElfProgramLoader* elf_loader() const { return elf_loader_.get(); }
 
@@ -144,41 +162,6 @@ class MpactHandle {
   bool is_initialized() const { return is_initialized_; }
 
  private:
-  std::unique_ptr<CoralNPUV2State> CreateState(MemoryInterface* memory,
-                                               uint32_t itcm_start_address,
-                                               uint32_t itcm_length,
-                                               uint32_t initial_misa_value,
-                                               uint32_t dtcm_start_address,
-                                               uint32_t dtcm_length) {
-    auto state = std::make_unique<CoralNPUV2StateFactory>()
-                     ->SetItcmRange(itcm_start_address, itcm_length)
-                     ->SetInitialMisaValue(initial_misa_value)
-                     ->AddLsuAccessRange(dtcm_start_address, dtcm_length)
-                     ->Create("CoralNPUV2", RiscVXlen::RV32, memory, nullptr);
-
-    // Make sure the architectural and abi register aliases are added.
-    std::string reg_name;
-    for (int i = 0; i < 32; i++) {
-      reg_name = absl::StrCat(RiscVState::kXregPrefix, i);
-      [[maybe_unused]] RV32Register* xreg =
-          state->AddRegister<RV32Register>(reg_name);
-      CHECK_OK(state->AddRegisterAlias<RV32Register>(reg_name,
-                                                     kXRegisterAliases[i]));
-
-      reg_name = absl::StrCat(RiscVState::kFregPrefix, i);
-      [[maybe_unused]] RVFpRegister* freg =
-          state->AddRegister<RVFpRegister>(reg_name);
-      CHECK_OK(state->AddRegisterAlias<RVFpRegister>(reg_name,
-                                                     kFRegisterAliases[i]));
-
-      reg_name = absl::StrCat(RiscVState::kVregPrefix, i);
-      [[maybe_unused]] RVVectorRegister* vreg =
-          state->AddRegister<RVVectorRegister>(reg_name,
-                                               kCoralnpuV2VectorByteLength);
-    }
-    return state;
-  }
-
   std::unique_ptr<RiscVFPState> CreateFPState(CoralNPUV2State* state) {
     return std::make_unique<RiscVFPState>(state->csr_set(), state);
   }
@@ -242,6 +225,20 @@ int mpact_config(sim_config_t* config_data) {
   return 0;
 }
 
+int mpact_add_load_store_range(uint32_t start_address, uint32_t length) {
+  if (g_mpact_handle == nullptr) {
+    LOG(ERROR) << "[DPI] mpact_add_load_store_range: g_mpact_handle is null.";
+    return -1;
+  }
+  if (!g_mpact_handle->is_initialized()) {
+    LOG(WARNING) << "[DPI] mpact_add_load_store_range: mpact_config must be "
+                 << "run before mpact_add_load_store_range.";
+    return -2;
+  }
+  g_mpact_handle->state()->AddLsuAccessRange(start_address, length);
+  return 0;
+}
+
 int mpact_load_program(const char* elf_file) {
   if (elf_file == nullptr) {
     LOG(ERROR) << "[DPI] mpact_init: received a null elf program.";
@@ -269,7 +266,8 @@ int mpact_step(const svLogicVecVal* instruction) {
     return -1;
   }
   if (!g_mpact_handle->is_initialized()) {
-    LOG(INFO) << "[DPI] mpact_step: Lazy initialization of g_mpact_handle.";
+    LOG(INFO) << "[DPI] mpact_step: Lazy initialization of g_mpact_handle. "
+              << "Using default DTCM start address and length.";
     g_mpact_handle->Init(nullptr);
   }
   if (g_mpact_handle->cosimulation_halted()) {

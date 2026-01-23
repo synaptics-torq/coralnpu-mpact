@@ -236,25 +236,26 @@ void CoralNPUTop::Initialize() {
 
   // Connect counters to instret(h) and mcycle(h) CSRs.
   auto csr_res = state_->csr_set()->GetCsr("minstret");
+  CHECK_OK(csr_res) << "Failed to get minstret CSR";
   // Minstret/minstreth.
-  auto* minstret = reinterpret_cast<RiscVCounterCsr<uint32_t, CoralNPUState>*>(
-      csr_res.value());
+  auto* minstret =
+      reinterpret_cast<RiscVCounterCsr<uint32_t, CoralNPUState>*>(*csr_res);
   minstret->set_counter(&counter_num_instructions_);
   csr_res = state_->csr_set()->GetCsr("minstreth");
-  CHECK_OK(csr_res.status()) << "Failed to get minstret CSR";
+  CHECK_OK(csr_res) << "Failed to get minstreth CSR";
   auto* minstreth =
-      reinterpret_cast<RiscVCounterCsrHigh<CoralNPUState>*>(csr_res.value());
+      reinterpret_cast<RiscVCounterCsrHigh<CoralNPUState>*>(*csr_res);
   minstreth->set_counter(&counter_num_instructions_);
   // Mcycle/mcycleh.
   csr_res = state_->csr_set()->GetCsr("mcycle");
-  CHECK_OK(csr_res.status()) << "Failed to get mcycle CSR";
-  auto* mcycle = reinterpret_cast<RiscVCounterCsr<uint32_t, CoralNPUState>*>(
-      csr_res.value());
+  CHECK_OK(csr_res) << "Failed to get mcycle CSR";
+  auto* mcycle =
+      reinterpret_cast<RiscVCounterCsr<uint32_t, CoralNPUState>*>(*csr_res);
   mcycle->set_counter(&counter_num_cycles_);
   csr_res = state_->csr_set()->GetCsr("mcycleh");
-  CHECK_OK(csr_res.status()) << "Failed to get mcycleh CSR";
+  CHECK_OK(csr_res) << "Failed to get mcycleh CSR";
   auto* mcycleh =
-      reinterpret_cast<RiscVCounterCsrHigh<CoralNPUState>*>(csr_res.value());
+      reinterpret_cast<RiscVCounterCsrHigh<CoralNPUState>*>(*csr_res);
   mcycleh->set_counter(&counter_num_cycles_);
 
   semihost_->set_exit_callback(

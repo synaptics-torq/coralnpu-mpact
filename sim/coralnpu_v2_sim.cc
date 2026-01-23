@@ -19,14 +19,18 @@
 #include <iostream>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "sim/coralnpu_v2_simulator.h"
 #include "absl/flags/flag.h"
+#include "absl/flags/marshalling.h"
 #include "absl/flags/parse.h"
 #include "absl/flags/usage.h"
 #include "absl/log/initialize.h"
 #include "absl/log/log.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_split.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 
@@ -45,11 +49,11 @@ ABSL_FLAG(uint32_t, itcm_start_address, 0x0,
 ABSL_FLAG(uint32_t, itcm_length, 0x2000, "Set the length of the ITCM range.");
 ABSL_FLAG(uint32_t, initial_misa_value, 0x40201120,
           "Set the initial value of the misa register.");
-ABSL_FLAG(uint32_t, dtcm_start_address, 0x10000,
-          "Set the start address of the DTCM range.");
-ABSL_FLAG(uint32_t, dtcm_length, 0x8000, "Set the length of the DTCM range.");
-
 ABSL_FLAG(bool, exit_on_ebreak, false, "Exit on ebreak instruction.");
+
+ABSL_FLAG(std::vector<std::string>, allow_lsu_range, {"0x10000:0x8000"},
+          "Allowed LSU range. Format is start_address:length. "
+          "Repeat this option to specify multiple ranges.");
 
 // Static pointer to the simulator instance. Used by the control-C handler.
 static CoralNPUV2Simulator* g_simulator = nullptr;
@@ -83,9 +87,29 @@ int main(int argc, char** argv) {
   options.itcm_start_address = absl::GetFlag(FLAGS_itcm_start_address);
   options.itcm_length = absl::GetFlag(FLAGS_itcm_length);
   options.initial_misa_value = absl::GetFlag(FLAGS_initial_misa_value);
-  options.dtcm_start_address = absl::GetFlag(FLAGS_dtcm_start_address);
-  options.dtcm_length = absl::GetFlag(FLAGS_dtcm_length);
   options.exit_on_ebreak = absl::GetFlag(FLAGS_exit_on_ebreak);
+  options.lsu_access_ranges.clear();
+
+  for (const std::string& range_str : absl::GetFlag(FLAGS_allow_lsu_range)) {
+    std::vector<std::string> range = absl::StrSplit(range_str, ':');
+    if (range.size() != 2) {
+      LOG(ERROR) << "Invalid LSU range: " << range_str << ". The expected "
+                 << "format is start_address:length. Use hex or decimal "
+                 << "values.";
+      return -1;
+    }
+    uint32_t start, length;
+    std::string error;
+    if (!absl::ParseFlag(range[0], &start, &error)) {
+      LOG(ERROR) << "Invalid LSU range: " << range_str << " " << error;
+      return -1;
+    }
+    if (!absl::ParseFlag(range[1], &length, &error)) {
+      LOG(ERROR) << "Invalid LSU range: " << range_str << " " << error;
+      return -1;
+    }
+    options.lsu_access_ranges.push_back({start, length});
+  }
 
   CoralNPUV2Simulator simulator(options);
 

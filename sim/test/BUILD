@@ -218,13 +218,46 @@ cc_test(
     ],
 )
 
+genrule(
+    name = "align_test_generated_h",
+    srcs = ["testfiles/align_test.disassm"],
+    outs = ["align_test_generated.h"],
+    cmd = "awk -v header_guard=LEARNING_BRAIN_RESEARCH_KELVIN_SIM_TEST_ALIGN_TEST_GENERATED_H_ -v nested_namespace=align_test -f $(location testfiles/disassm_to_header.awk) $< > $@",
+    tools = ["testfiles/disassm_to_header.awk"],
+)
+
+cc_library(
+    name = "align_test_generated",
+    hdrs = ["align_test_generated.h"],
+)
+
+genrule(
+    name = "frm_test_generated_h",
+    srcs = ["testfiles/frm_test.disassm"],
+    outs = ["frm_test_generated.h"],
+    cmd = "awk -v header_guard=LEARNING_BRAIN_RESEARCH_KELVIN_SIM_TEST_FRM_TEST_GENERATED_H_ -v nested_namespace=frm_test -f $(location testfiles/disassm_to_header.awk) $< > $@",
+    tools = ["testfiles/disassm_to_header.awk"],
+)
+
+cc_library(
+    name = "frm_test_generated",
+    hdrs = ["frm_test_generated.h"],
+)
+
 cc_test(
     name = "coralnpu_cosim_dpi_wrapper_test",
     srcs = ["coralnpu_cosim_dpi_wrapper_test.cc"],
     copts = ["-Werror"],
     deps = [
+        ":align_test_generated",
+        ":frm_test_generated",
         "//sim/cosim:coralnpu_cosim_lib",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_googletest//:gtest_main",
+        "@com_google_mpact-riscv//riscv:riscv_state",
     ],
 )
 

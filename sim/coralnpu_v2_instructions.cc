@@ -47,6 +47,14 @@ bool AccessCheck(const Instruction* /*absl_nonnull*/ instruction) {
     LOG(ERROR) << "AccessCheck: state is nullptr.";
     return false;
   }
+  uint32_t itcm_start = state->itcm_start_address();
+  uint32_t itcm_end = itcm_start + state->itcm_length();
+  // Always allow ITCM loads.
+  if (address >= itcm_start && address + sizeof(ValueType) <= itcm_end) {
+    if (fault_exception_code == ExceptionCode::kLoadAccessFault) {
+      return true;
+    }
+  }
   if (!state->IsLsuAccessValid(address, sizeof(ValueType))) {
     state->Trap(/*is_interrupt=*/false, /*trap_value=*/0, *fault_exception_code,
                 /*epc=*/instruction->address(), instruction);

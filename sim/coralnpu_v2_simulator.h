@@ -20,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "sim/coralnpu_v2_state.h"
 #include "absl/status/status.h"
@@ -39,9 +40,10 @@ struct CoralNPUV2SimulatorOptions {
   uint32_t itcm_start_address = 0x0;
   uint32_t itcm_length = 0x2000;
   uint32_t initial_misa_value = 0x40201120;
-  uint32_t dtcm_start_address = 0x10000;
-  uint32_t dtcm_length = 0x8000;
   bool exit_on_ebreak = false;
+  std::vector<CoralNPUV2LsuAccessRange> lsu_access_ranges = {
+      {.start_address = 0x10000, .length = 0x8000}  // Default DTCM range.
+  };
 };
 
 class CoralNPUV2Simulator {

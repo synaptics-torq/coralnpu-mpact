@@ -58,13 +58,20 @@ CoralNPUV2Simulator::CoralNPUV2Simulator(
     : options_(options) {
   // Create the memory interface and the state.
   memory_ = std::make_unique<FlatDemandMemory>();
+
+  CoralNPUV2StateConfig config = {
+      .itcm_start_address = options_.itcm_start_address,
+      .itcm_length = options_.itcm_length,
+      .initial_misa_value = options_.initial_misa_value,
+      .lsu_access_ranges = options_.lsu_access_ranges,
+  };
+  for (const auto& range : options_.lsu_access_ranges) {
+    config.lsu_access_ranges.push_back(
+        {.start_address = range.start_address, .length = range.length});
+  }
   state_ =
-      std::make_unique<CoralNPUV2StateFactory>()
-          ->SetItcmRange(options_.itcm_start_address, options_.itcm_length)
-          ->SetInitialMisaValue(options_.initial_misa_value)
-          ->AddLsuAccessRange(options_.dtcm_start_address, options_.dtcm_length)
-          ->Create("CoralNPUV2", mpact::sim::riscv::RiscVXlen::RV32,
-                   memory_.get(), /*atomic_memory=*/nullptr);
+      CreateCoralNPUV2State("CoralNPUV2", mpact::sim::riscv::RiscVXlen::RV32,
+                            memory_.get(), /*atomic_memory=*/nullptr, &config);
 
   // Add the scalar, floating point and vector registers to the state.
   std::string reg_name;

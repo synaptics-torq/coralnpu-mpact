@@ -15,8 +15,11 @@
 #include "sim/coralnpu_v2_state.h"
 
 #include <cstdint>
+#include <memory>
 
 #include "absl/base/nullability.h"
+#include "absl/log/log.h"
+#include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "riscv/riscv_state.h"
 #include "mpact/sim/util/memory/memory_interface.h"
@@ -55,7 +58,27 @@ bool CoralNPUV2State::IsLsuAccessValid(uint32_t address, uint32_t size) {
       return true;
     }
   }
+  LOG(ERROR) << "LSU access invalid: " << absl::StrFormat("0x%08x", address)
+             << " " << absl::StrFormat("0x%08x", size);
   return false;
+}
+
+std::unique_ptr<CoralNPUV2State> CreateCoralNPUV2State(
+    absl::string_view id, ::mpact::sim::riscv::RiscVXlen xlen,
+    ::mpact::sim::util::MemoryInterface* /*absl_nonnull*/ memory,
+    ::mpact::sim::util::AtomicMemoryOpInterface* /*absl_nullable*/ atomic_memory,
+    const CoralNPUV2StateConfig* /*absl_nullable*/ config) {
+  auto state =
+      std::make_unique<CoralNPUV2State>(id, xlen, memory, atomic_memory);
+  if (config != nullptr) {
+    state->set_itcm_start_address(config->itcm_start_address);
+    state->set_itcm_length(config->itcm_length);
+    state->misa()->Set(internal::StretchMisa32(config->initial_misa_value));
+    for (const auto& range : config->lsu_access_ranges) {
+      state->AddLsuAccessRange(range.start_address, range.length);
+    }
+  }
+  return state;
 }
 
 }  // namespace coralnpu::sim

@@ -227,7 +227,9 @@ cc_library(
     deps = [
         "@com_google_absl//absl/base:nullability",
         "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/log",
         "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
         "@com_google_mpact-riscv//riscv:riscv_state",
         "@com_google_mpact-sim//mpact/sim/generic:instruction",
         "@com_google_mpact-sim//mpact/sim/util/memory",
@@ -369,11 +371,14 @@ cc_binary(
     deps = [
         ":coralnpu_v2_simulator",
         "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:marshalling",
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/flags:usage",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:initialize",
+        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_absl//absl/time",
     ],
 )

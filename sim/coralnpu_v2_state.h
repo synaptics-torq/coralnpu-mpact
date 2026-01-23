@@ -29,6 +29,8 @@
 
 namespace coralnpu::sim {
 
+using ::mpact::sim::generic::operator*;  // NOLINT: clang-tidy false positive.
+
 namespace internal {
 // StretchMisa32 stretches the 32-bit value into a 64-bit value by moving the
 // upper 2 bits of the 32-bit input to the upper 2 bits of the 64-bit output.
@@ -45,6 +47,16 @@ struct CoralNPUV2LsuAccessRange {
 };
 
 constexpr int kCoralnpuV2VectorByteLength = 16;
+constexpr uint32_t kCoralNPUV2DefaultItcmStartAddress = 0;
+constexpr uint32_t kCoralNPUV2DefaultItcmLength = 0x2000;
+constexpr uint32_t kCoralNPUV2DefaultDtcmStartAddress = 0x10000;
+constexpr uint32_t kCoralNPUV2DefaultDtcmLength = 0x8000;
+constexpr uint32_t kCoralNPUV2DefaultInitialMisaValue =
+    (*::mpact::sim::riscv::RiscVXlen::RV32 << 30) |
+    *::mpact::sim::riscv::IsaExtension::kIntegerMulDiv |
+    *::mpact::sim::riscv::IsaExtension::kRVIBaseIsa |
+    *::mpact::sim::riscv::IsaExtension::kSinglePrecisionFp |
+    *::mpact::sim::riscv::IsaExtension::kVectorExtension;
 
 class CoralNPUV2State : public ::mpact::sim::riscv::RiscVState {
  public:
@@ -108,63 +120,25 @@ class CoralNPUV2State : public ::mpact::sim::riscv::RiscVState {
   uint32_t itcm_length_ = 0;
 };
 
-class CoralNPUV2StateFactory {
- public:
-  using AtomicMemoryOpInterface = ::mpact::sim::util::AtomicMemoryOpInterface;
-  using MemoryInterface = ::mpact::sim::util::MemoryInterface;
-  using RiscVXlen = ::mpact::sim::riscv::RiscVXlen;
-
-  CoralNPUV2StateFactory() = default;
-  ~CoralNPUV2StateFactory() = default;
-
-  CoralNPUV2StateFactory* SetItcmRange(uint32_t start_address,
-                                       uint32_t length) {
-    itcm_start_address_ = start_address;
-    itcm_length_ = length;
-    is_itcm_range_set_ = true;
-    return this;
-  }
-
-  CoralNPUV2StateFactory* SetInitialMisaValue(uint32_t value) {
-    initial_misa_value_ = value;
-    is_misa_value_set_ = true;
-    return this;
-  }
-
-  CoralNPUV2StateFactory* AddLsuAccessRange(uint32_t start_address,
-                                            uint32_t length) {
-    lsu_access_ranges_.push_back(
-        {.start_address = start_address, .length = length});
-    return this;
-  }
-
-  std::unique_ptr<CoralNPUV2State> Create(
-      absl::string_view id, RiscVXlen xlen,
-      MemoryInterface* /*absl_nonnull*/ memory,
-      AtomicMemoryOpInterface* /*absl_nullable*/ atomic_memory) {
-    auto state =
-        std::make_unique<CoralNPUV2State>(id, xlen, memory, atomic_memory);
-    if (is_itcm_range_set_) {
-      state->set_itcm_start_address(itcm_start_address_);
-      state->set_itcm_length(itcm_length_);
-    }
-    if (is_misa_value_set_) {
-      state->misa()->Set(internal::StretchMisa32(initial_misa_value_));
-    }
-    for (const auto& range : lsu_access_ranges_) {
-      state->AddLsuAccessRange(range.start_address, range.length);
-    }
-    return state;
-  }
-
- private:
-  bool is_itcm_range_set_ = false;
-  uint32_t itcm_start_address_ = 0;
-  uint32_t itcm_length_ = 0;
-  bool is_misa_value_set_ = false;
-  uint32_t initial_misa_value_ = 0;
-  std::vector<CoralNPUV2LsuAccessRange> lsu_access_ranges_;
+struct CoralNPUV2StateConfig {
+  // The start address of the ITCM range.
+  uint32_t itcm_start_address = kCoralNPUV2DefaultItcmStartAddress;
+  // The length of the ITCM range.
+  uint32_t itcm_length = kCoralNPUV2DefaultItcmLength;
+  // The initial value of the misa register.
+  uint32_t initial_misa_value = kCoralNPUV2DefaultInitialMisaValue;
+  // The ranges that are allowed for LSU access.
+  std::vector<CoralNPUV2LsuAccessRange> lsu_access_ranges = {
+      {.start_address = kCoralNPUV2DefaultDtcmStartAddress,
+       .length = kCoralNPUV2DefaultDtcmLength}};
 };
+
+std::unique_ptr<CoralNPUV2State> CreateCoralNPUV2State(
+    absl::string_view id, ::mpact::sim::riscv::RiscVXlen xlen,
+    ::mpact::sim::util::MemoryInterface* /*absl_nonnull*/ memory,
+    ::mpact::sim::util::AtomicMemoryOpInterface* /*absl_nullable*/ atomic_memory,
+    const CoralNPUV2StateConfig* /*absl_nullable*/ config);
+
 }  // namespace coralnpu::sim
 
 #endif  // SIM_CORALNPU_V2_STATE_H_

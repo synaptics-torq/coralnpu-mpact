@@ -2,7 +2,11 @@
 #include <vector>
 
 #include "sim/cosim/coralnpu_cosim_dpi.h"
+#include "sim/test/align_test_generated.h"
+#include "sim/test/frm_test_generated.h"
 #include "googletest/include/gtest/gtest.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/strings/str_format.h"
 #include "external/svdpi_h_file/file/svdpi.h"
 
 namespace {
@@ -17,8 +21,8 @@ constexpr uint32_t kAddImmediateToX5_1776 =
     0b011011110000'00101'000'00101'0010011;
 constexpr uint32_t kExpectedX5Value = 0xdeadbeef;
 constexpr uint32_t kNopInstruction = 0x00000013;  // x0 = x0 + 0 (nop)
-constexpr uint32_t kExpectedMisaValue = 0x40201120;
 constexpr uint32_t kMpause = 0b000'0100'00000'00000'000'00000'111'0011;
+constexpr uint32_t kStoreX1ToX2 = 0b0000000'00001'00010'010'00000'0100011;
 
 class CosimFixture : public ::testing::Test {
  public:
@@ -103,12 +107,6 @@ TEST_F(CosimFixture, GetFpr) {
   EXPECT_EQ(fpr_value, kExpectedX5Value);
 }
 
-TEST_F(CosimFixture, GetMisaCsr) {
-  uint32_t misa_value = 0;
-  EXPECT_EQ(mpact_get_register("misa", &misa_value), 0);
-  EXPECT_EQ(misa_value, kExpectedMisaValue);
-}
-
 TEST_F(CosimFixture, GetVectorRegister) {
   uint32_t x5_val = 0;
   EXPECT_EQ(add_test_values_to_x5(), 0);
@@ -182,4 +180,113 @@ TEST_F(CosimFixture, GetPcWithCustomConfig) {
   EXPECT_EQ(pc_value, test_itcm_start_address);
 }
 
+// Without calling mpact_config(), the simulator should use the default
+// DTCM configuration.
+TEST_F(CosimFixture, TestDtcmWriteWithLazyInitialization) {
+  uint32_t pc_value = 0;
+  ASSERT_EQ(mpact_set_register("x1", 0x01234567), 0);
+  ASSERT_EQ(mpact_set_register("x2", 0x10000), 0);
+  ASSERT_EQ(mpact_step_wrapper(kStoreX1ToX2), 0);
+  ASSERT_EQ(mpact_get_register("pc", &pc_value), 0);
+
+  // The program counter will only go to the next instruction if the store
+  // instruction didn't trigger a trap.
+  EXPECT_EQ(pc_value, 4);
+}
+
+// Test that the cosim wrapper can run the align_test elf program. This program
+// makes use of external memory.
+TEST_F(CosimFixture, AlignTest) {
+  using InstructionData = coralnpu::sim::test_data::align_test::InstructionData;
+  std::vector<InstructionData> instructions =
+      coralnpu::sim::test_data::align_test::GetInstructions();
+  absl::flat_hash_map<uint32_t, uint32_t> instruction_map;
+  for (const InstructionData& instruction : instructions) {
+    instruction_map[instruction.address] = instruction.instruction;
+  }
+  constexpr uint32_t kEntryPoint = 0x254;
+  constexpr uint32_t kExitAddress = 0x1dc;
+  constexpr uint32_t kTrapHandlerAddress = 0x350;
+  constexpr uint32_t kExtMemStartAddress = 0x2000'0000;
+  constexpr uint32_t kProgramExtMemPointerAddress = 0x0001'0000;
+  constexpr int kMaxIterations = 10'000'000;
+
+  sim_config_t config_data = {
+      .itcm_start_address = 0x0,
+      .itcm_length = 0x2000,
+      .initial_misa_value = 0x40201120,
+  };
+  ASSERT_EQ(mpact_config(&config_data), 0);
+  ASSERT_EQ(mpact_add_load_store_range(0x10000, 0x8000), 0);
+  ASSERT_EQ(mpact_add_load_store_range(kExtMemStartAddress, 0x0040'0000), 0);
+
+  // Set the variables in the elf .data section.
+  ASSERT_EQ(mpact_set_register("pc", 0x800), 0);
+  ASSERT_EQ(mpact_set_register("x1", kExtMemStartAddress), 0);
+  ASSERT_EQ(mpact_set_register("x2", kProgramExtMemPointerAddress), 0);
+  ASSERT_EQ(mpact_step_wrapper(kStoreX1ToX2), 0);
+  ASSERT_EQ(mpact_set_register("x1", 0x0001'0020), 0);
+  ASSERT_EQ(mpact_set_register("x2", 0x0001'0004), 0);
+  ASSERT_EQ(mpact_step_wrapper(kStoreX1ToX2), 0);
+
+  ASSERT_EQ(mpact_set_register("pc", kEntryPoint), 0);
+  uint32_t instruction_data = 0;
+  uint32_t pc_value = 0;
+  uint32_t pc_after_step = 0;
+  for (int i = 0; i < kMaxIterations; i++) {
+    ASSERT_EQ(mpact_get_register("pc", &pc_value), 0);
+    instruction_data = instruction_map[pc_value];
+    ASSERT_EQ(mpact_step_wrapper(instruction_data), 0);
+    ASSERT_EQ(mpact_get_register("pc", &pc_after_step), 0);
+    ASSERT_NE(pc_after_step, kTrapHandlerAddress)
+        << "an unexpected trap happened.";
+    if (pc_value == kExitAddress || instruction_data == kMpause) {
+      return;
+    }
+  }
+  FAIL() << "Test did not exit. final pc: "
+         << absl::StrFormat("0x%08x", pc_value);
+}
+
+// Test that the cosim wrapper can run the frm_test elf program. This program
+// does a LOAD from the ITCM range.
+TEST_F(CosimFixture, FrmTest) {
+  using InstructionData = coralnpu::sim::test_data::frm_test::InstructionData;
+  std::vector<InstructionData> instructions =
+      coralnpu::sim::test_data::frm_test::GetInstructions();
+  absl::flat_hash_map<uint32_t, uint32_t> instruction_map;
+  for (const InstructionData& instruction : instructions) {
+    instruction_map[instruction.address] = instruction.instruction;
+  }
+  constexpr uint32_t kEntryPoint = 0;
+  constexpr uint32_t kLoopAddress = 0x000000f0;
+  constexpr uint32_t kTrapHandlerAddress = 0x000000f4;
+  constexpr int kMaxIterations = 10'000'000;
+
+  sim_config_t config_data = {
+      .itcm_start_address = 0x0,
+      .itcm_length = 0x2000,
+      .initial_misa_value = 0x40201120,
+  };
+  ASSERT_EQ(mpact_config(&config_data), 0);
+  ASSERT_EQ(mpact_add_load_store_range(0x10000, 0x8000), 0);
+
+  ASSERT_EQ(mpact_set_register("pc", kEntryPoint), 0);
+  uint32_t instruction_data = 0;
+  uint32_t pc_value = 0;
+  uint32_t pc_after_step = 0;
+  for (int i = 0; i < kMaxIterations; i++) {
+    ASSERT_EQ(mpact_get_register("pc", &pc_value), 0);
+    instruction_data = instruction_map[pc_value];
+    ASSERT_EQ(mpact_step_wrapper(instruction_data), 0);
+    ASSERT_EQ(mpact_get_register("pc", &pc_after_step), 0);
+    ASSERT_NE(pc_after_step, kTrapHandlerAddress)
+        << "an unexpected trap happened.";
+    if (pc_value == kLoopAddress || instruction_data == kMpause) {
+      return;
+    }
+  }
+  FAIL() << "Test did not exit. final pc: "
+         << absl::StrFormat("0x%08x", pc_value);
+}
 }  // namespace
