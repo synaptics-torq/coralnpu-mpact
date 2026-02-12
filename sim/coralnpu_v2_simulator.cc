@@ -20,6 +20,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "sim/coralnpu_v2_state.h"
 #include "sim/coralnpu_v2_user_decoder.h"
@@ -27,7 +28,9 @@
 #include "absl/log/log.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "elfio/elf_types.hpp"
 #include "riscv/debug_command_shell.h"
+#include "riscv/riscv32_htif_semihost.h"
 #include "riscv/riscv_fp_state.h"
 #include "riscv/riscv_register.h"
 #include "riscv/riscv_register_aliases.h"
@@ -37,6 +40,7 @@
 #include "mpact/sim/generic/data_buffer.h"
 #include "mpact/sim/generic/instruction.h"
 #include "mpact/sim/util/memory/flat_demand_memory.h"
+#include "mpact/sim/util/memory/memory_watcher.h"
 #include "mpact/sim/util/program_loader/elf_program_loader.h"
 
 namespace coralnpu::sim {
@@ -44,6 +48,7 @@ namespace coralnpu::sim {
 using ::mpact::sim::generic::Instruction;
 using ::mpact::sim::riscv::kFRegisterAliases;
 using ::mpact::sim::riscv::kXRegisterAliases;
+using ::mpact::sim::riscv::RiscV32HtifSemiHost;
 using ::mpact::sim::riscv::RiscVFPState;
 using ::mpact::sim::riscv::RiscVState;
 using ::mpact::sim::riscv::RiscVTop;
@@ -51,7 +56,38 @@ using ::mpact::sim::riscv::RiscVVectorState;
 using ::mpact::sim::riscv::RV32Register;
 using ::mpact::sim::riscv::RVFpRegister;
 using ::mpact::sim::riscv::RVVectorRegister;
+using ::mpact::sim::util::ElfProgramLoader;
 using ::mpact::sim::util::FlatDemandMemory;
+using ::mpact::sim::util::MemoryWatcher;
+
+namespace {
+// Helper function to get the magic semihosting addresses from the loader.
+static bool GetMagicAddresses(ElfProgramLoader* loader,
+                              RiscV32HtifSemiHost::SemiHostAddresses* magic) {
+  auto result = loader->GetSymbol("tohost_ready");
+  if (!result.ok()) return false;
+  magic->tohost_ready = result.value().first;
+
+  result = loader->GetSymbol("tohost");
+  if (!result.ok()) return false;
+  magic->tohost = result.value().first;
+
+  result = loader->GetSymbol("fromhost_ready");
+  if (!result.ok()) return false;
+  magic->fromhost_ready = result.value().first;
+
+  result = loader->GetSymbol("fromhost");
+  if (!result.ok()) return false;
+  magic->fromhost = result.value().first;
+
+  LOG(INFO) << absl::StrFormat(
+      "HTIF magic addresses: tohost=0x%08x, tohost_ready=0x%08x, "
+      "fromhost=0x%08x, fromhost_ready=0x%08x",
+      magic->tohost, magic->tohost_ready, magic->fromhost,
+      magic->fromhost_ready);
+  return true;
+}
+}  // namespace
 
 CoralNPUV2Simulator::CoralNPUV2Simulator(
     const CoralNPUV2SimulatorOptions& options)
@@ -124,9 +160,12 @@ CoralNPUV2Simulator::CoralNPUV2Simulator(
     return false;
   });
 
-  elf_loader_ =
-      std::make_unique<mpact::sim::util::ElfProgramLoader>(memory_.get());
+  elf_loader_ = std::make_unique<ElfProgramLoader>(memory_.get());
+
+  memory_watcher_ = std::make_unique<MemoryWatcher>(memory_.get());
 }
+
+CoralNPUV2Simulator::~CoralNPUV2Simulator() = default;
 
 absl::Status CoralNPUV2Simulator::LoadProgram(
     const std::string& file_name, std::optional<uint32_t> entry_point) {
@@ -143,6 +182,48 @@ absl::Status CoralNPUV2Simulator::LoadProgram(
         "ELF recorded entry point 0x%08x is different from the flag value "
         "0x%08x. The program may not start properly",
         elf_entry_point, final_entry_point);
+  }
+
+  if (options_.semihost_htif) {
+    // When semihosting is enabled, we need to allow access to the program's
+    // memory regions (data, bss, heap, stack, htif buffers). We use the
+    // elf_loader to find the program's LOAD segments and add them as LSU
+    // access ranges.
+    for (const auto& segment : elf_loader_->elf_reader()->segments) {
+      if (segment->get_type() == ELFIO::PT_LOAD) {
+        uint64_t addr = segment->get_physical_address();
+        if (addr == 0) {
+          addr = segment->get_virtual_address();
+        }
+        uint64_t size = segment->get_memory_size();
+        if (size > 0) {
+          LOG(INFO) << absl::StrFormat(
+              "Adding LSU access range for segment: 0x%08x:0x%08x", addr, size);
+          state_->AddLsuAccessRange(static_cast<uint32_t>(addr),
+                                    static_cast<uint32_t>(size));
+        }
+      }
+    }
+
+    // Add htif semihosting.
+    RiscV32HtifSemiHost::SemiHostAddresses magic_addresses;
+    if (GetMagicAddresses(elf_loader_.get(), &magic_addresses)) {
+      htif_semihost_ = std::make_unique<RiscV32HtifSemiHost>(
+          memory_watcher_.get(), memory_.get(), magic_addresses,
+          [this]() {
+            LOG(INFO) << "HTIF semihosting halt request received";
+            top_->RequestHalt(RiscVTop::HaltReason::kSemihostHaltRequest,
+                              nullptr);
+          },
+          [this](std::string error) {
+            LOG(ERROR) << "HTIF semihosting error: " << error;
+            top_->RequestHalt(RiscVTop::HaltReason::kSemihostHaltRequest,
+                              nullptr);
+          });
+      state_->set_memory(memory_watcher_.get());
+    } else {
+      LOG(WARNING) << "HTIF semihosting enabled but magic addresses not found";
+    }
   }
 
   // Initialize the PC to the entry point.

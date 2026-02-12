@@ -81,4 +81,10 @@ std::unique_ptr<CoralNPUV2State> CreateCoralNPUV2State(
   return state;
 }
 
+bool CoralNPUV2State::IsJumpValid(uint32_t address) {
+  // Can't jump outside of ITCM
+  return (address >= itcm_start_address() &&
+          address < (itcm_start_address() + itcm_length()));
+}
+
 }  // namespace coralnpu::sim

@@ -22,6 +22,7 @@ exports_files(
         "testfiles/coralnpu_ebreak.elf",
         "testfiles/coralnpu_perf_counters.elf",
         "testfiles/coralnpu_v2_rvv_add_intrinsic.disassm",
+        "testfiles/coralnpu_v2_rvv_add_intrinsic.elf",
         "testfiles/coralnpu_vldvst.elf",
         "testfiles/disassm_to_header.awk",
         "testfiles/hello_world_mpause.bin",
@@ -253,11 +254,8 @@ cc_test(
         ":frm_test_generated",
         "//sim/cosim:coralnpu_cosim_lib",
         "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/log",
-        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_googletest//:gtest_main",
-        "@com_google_mpact-riscv//riscv:riscv_state",
     ],
 )
 
@@ -295,6 +293,9 @@ cc_test(
     name = "coralnpu_v2_simulator_test",
     srcs = ["coralnpu_v2_simulator_test.cc"],
     copts = ["-Werror"],
+    data = [
+        "testfiles/coralnpu_v2_rvv_add_intrinsic.elf",
+    ],
     deps = [
         ":coralnpu_v2_rvv_add_intrinsic_generated",
         "//sim:coralnpu_v2_simulator",
@@ -304,5 +305,8 @@ cc_test(
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
         "@com_google_mpact-sim//mpact/sim/generic:core",
+        "@com_google_mpact-sim//mpact/sim/generic:core_debug_interface",
+        "@com_google_mpact-sim//mpact/sim/util/memory",
+        "@com_google_mpact-sim//mpact/sim/util/program_loader:elf_loader",
     ],
 )

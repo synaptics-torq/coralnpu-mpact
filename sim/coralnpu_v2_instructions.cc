@@ -21,6 +21,7 @@
 #include "absl/base/nullability.h"
 #include "absl/log/log.h"
 #include "riscv/riscv_f_instructions.h"
+#include "riscv/riscv_i_instructions.h"
 #include "riscv/riscv_instruction_helpers.h"
 #include "riscv/riscv_register.h"
 #include "riscv/riscv_state.h"
@@ -43,10 +44,6 @@ bool AccessCheck(const Instruction* /*absl_nonnull*/ instruction) {
       instruction, /*index=*/1);
   URegVal address = base + offset;
   CoralNPUV2State* state = static_cast<CoralNPUV2State*>(instruction->state());
-  if (!state) {
-    LOG(ERROR) << "AccessCheck: state is nullptr.";
-    return false;
-  }
   uint32_t itcm_start = state->itcm_start_address();
   uint32_t itcm_end = itcm_start + state->itcm_length();
   // Always allow ITCM loads.
@@ -56,8 +53,22 @@ bool AccessCheck(const Instruction* /*absl_nonnull*/ instruction) {
     }
   }
   if (!state->IsLsuAccessValid(address, sizeof(ValueType))) {
-    state->Trap(/*is_interrupt=*/false, /*trap_value=*/0, *fault_exception_code,
+    state->Trap(/*is_interrupt=*/false, /*trap_value=*/address,
+                *fault_exception_code,
                 /*epc=*/instruction->address(), instruction);
+    return false;
+  }
+  return true;
+}
+
+template <ExceptionCode fault_exception_code>
+bool IsJumpAllowed(uint64_t address,
+                   const Instruction* /*absl_nonnull*/ instruction) {
+  CoralNPUV2State* state = static_cast<CoralNPUV2State*>(instruction->state());
+  if (!state->IsJumpValid(address)) {
+    state->Trap(/*is_interrupt=*/false, /*trap_value=*/address,
+                *fault_exception_code,
+                /*epc=*/address, instruction);
     return false;
   }
   return true;
@@ -73,9 +84,7 @@ using ::mpact::sim::riscv::RVFpRegister;
 
 void CoralNPUV2Mpause(const Instruction* /*absl_nonnull*/ instruction) {
   CoralNPUV2State* state = static_cast<CoralNPUV2State*>(instruction->state());
-  if (state) {
-    state->MPause(instruction);
-  }
+  state->MPause(instruction);
 }
 
 void CoralNPUV2Lw(const Instruction* /*absl_nonnull*/ instruction) {
@@ -156,6 +165,43 @@ void CoralNPUV2Fsw(const Instruction* /*absl_nonnull*/ instruction) {
           instruction);
   if (is_store_allowed) {
     ::mpact::sim::riscv::RV32::RiscVFSw(instruction);
+  }
+}
+
+void CoralNPUV2Jal(const Instruction* /*absl_nonnull*/ instruction) {
+  using RegVal = RV32Register::ValueType;
+  using URegVal = typename std::make_unsigned<RegVal>::type;
+  RegVal offset =
+      ::mpact::sim::generic::GetInstructionSource<RegVal>(instruction, 0);
+  URegVal address = instruction->address() + offset;
+  if (IsJumpAllowed<ExceptionCode::kInstructionAccessFault>(address,
+                                                            instruction)) {
+    ::mpact::sim::riscv::RV32::RiscVIJal(instruction);
+  }
+}
+
+void CoralNPUV2Jalr(const Instruction* /*absl_nonnull*/ instruction) {
+  using RegVal = RV32Register::ValueType;
+  using URegVal = typename std::make_unsigned<RegVal>::type;
+  URegVal base =
+      ::mpact::sim::generic::GetInstructionSource<URegVal>(instruction, 0);
+  RegVal offset =
+      ::mpact::sim::generic::GetInstructionSource<RegVal>(instruction, 1);
+  URegVal address = base + offset;
+  if (IsJumpAllowed<ExceptionCode::kInstructionAccessFault>(address,
+                                                            instruction)) {
+    ::mpact::sim::riscv::RV32::RiscVIJalr(instruction);
+    return;
+  }
+  // If jump is not allowed, JalrAccessCheck has already called Trap.
+  // We still need to update rd with pc+4 for Jalr.
+  using RegType = RV32Register;
+  using ValueType = typename RegType::ValueType;
+  auto* dest = instruction->Destination(1);
+  auto* db = dest->AllocateDataBuffer();
+  if (db != nullptr) {
+    db->Set<ValueType>(0, instruction->address() + instruction->size());
+    db->Submit();
   }
 }
 

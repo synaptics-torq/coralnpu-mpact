@@ -132,19 +132,19 @@ slot riscv32i {
     jal{: J_imm20 : next_pc, rd},
       resources: { next_pc : next_pc[0..], rd[0..]},
       disasm: "jal", "%rd, 0x%(@+J_imm20:08x)",
-      semfunc: "&::mpact::sim::riscv::RV32::RiscVIJal";
+      semfunc: "&::coralnpu::sim::CoralNPUV2Jal";
     jalr{: rs1, J_imm12 : next_pc, rd},
       resources: { next_pc, rs1 : next_pc[0..], rd[0..]},
       disasm: "jalr", "%rd, %rs1, %J_imm12",
-      semfunc: "&::mpact::sim::riscv::RV32::RiscVIJalr";
+      semfunc: "&::coralnpu::sim::CoralNPUV2Jalr";
     j{: J_imm20 : next_pc, rd},
       resources: { next_pc : next_pc[0..], rd[0..]},
       disasm: "j", "0x%(@+J_imm20:08x)",
-      semfunc: "&::mpact::sim::riscv::RV32::RiscVIJal";
+      semfunc: "&::coralnpu::sim::CoralNPUV2Jal";
     jr{: rs1, J_imm12 : next_pc, rd},
       resources: { next_pc, rs1 : next_pc[0..], rd[0..]},
       disasm: "jr", "%rs1, %J_imm12",
-      semfunc: "&::mpact::sim::riscv::RV32::RiscVIJalr";
+      semfunc: "&::coralnpu::sim::CoralNPUV2Jalr";
     beq{: rs1, rs2, B_imm12 : next_pc},
       resources: { next_pc, rs1, rs2 : next_pc[0..]},
       disasm: "beq", "%rs1, %rs2, 0x%(@+B_imm12:08x)",

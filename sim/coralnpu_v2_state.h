@@ -51,6 +51,8 @@ constexpr uint32_t kCoralNPUV2DefaultItcmStartAddress = 0;
 constexpr uint32_t kCoralNPUV2DefaultItcmLength = 0x2000;
 constexpr uint32_t kCoralNPUV2DefaultDtcmStartAddress = 0x10000;
 constexpr uint32_t kCoralNPUV2DefaultDtcmLength = 0x8000;
+constexpr uint32_t kCoralNPUV2DefaultExtmemStartAddress = 0x20000000;
+constexpr uint32_t kCoralNPUV2DefaultExtmemLength = 0x400000;
 constexpr uint32_t kCoralNPUV2DefaultInitialMisaValue =
     (*::mpact::sim::riscv::RiscVXlen::RV32 << 30) |
     *::mpact::sim::riscv::IsaExtension::kIntegerMulDiv |
@@ -112,6 +114,7 @@ class CoralNPUV2State : public ::mpact::sim::riscv::RiscVState {
   }
 
   bool IsLsuAccessValid(uint32_t address, uint32_t size);
+  bool IsJumpValid(uint32_t address);
 
  private:
   std::vector<absl::AnyInvocable<bool(const Instruction*)>> on_mpause_;
@@ -130,7 +133,9 @@ struct CoralNPUV2StateConfig {
   // The ranges that are allowed for LSU access.
   std::vector<CoralNPUV2LsuAccessRange> lsu_access_ranges = {
       {.start_address = kCoralNPUV2DefaultDtcmStartAddress,
-       .length = kCoralNPUV2DefaultDtcmLength}};
+       .length = kCoralNPUV2DefaultDtcmLength},
+      {.start_address = kCoralNPUV2DefaultExtmemStartAddress,
+       .length = kCoralNPUV2DefaultExtmemLength}};
 };
 
 std::unique_ptr<CoralNPUV2State> CreateCoralNPUV2State(

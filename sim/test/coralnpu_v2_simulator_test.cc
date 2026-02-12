@@ -18,6 +18,9 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <string>
+#include <string_view>
+#include <type_traits>
 #include <vector>
 
 #include "sim/test/coralnpu_v2_rvv_add_intrinsic_generated.h"
@@ -27,7 +30,10 @@
 #include "absl/status/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "mpact/sim/generic/core_debug_interface.h"
 #include "mpact/sim/generic/data_buffer.h"
+#include "mpact/sim/util/memory/flat_demand_memory.h"
+#include "mpact/sim/util/program_loader/elf_program_loader.h"
 
 /* start - new test macros */
 #define ABSL_EXPECT_OK(expression) \
@@ -53,6 +59,12 @@ constexpr uint32_t kMpauseAddress = 0xf0;
 // input_2 is filled with 0x6. The final output should be 0x7.
 constexpr uint16_t kExpectedOutput = 0x7;
 
+// The depot path to the test directory.
+constexpr std::string_view kDepotPath =
+    "sim/test/";
+constexpr std::string_view kHelloSemihostElf =
+    "coralnpu_v2_rvv_add_intrinsic.elf";
+
 namespace {
 
 using ::coralnpu::sim::CoralNPUV2Simulator;
@@ -60,9 +72,26 @@ using ::coralnpu::sim::CoralNPUV2SimulatorOptions;
 using ::coralnpu::sim::test_data::coralnpu_v2_rvv_add_intrinsic::
     GetInstructions;
 using ::mpact::sim::generic::DataBuffer;
+using ::mpact::sim::generic::operator*;  // NOLINT
+using ::mpact::sim::util::ElfProgramLoader;
+using ::mpact::sim::util::FlatDemandMemory;
 using ::testing::Each;
+using ::testing::HasSubstr;
 using ::testing::Pointee;
 using ::absl_testing::IsOkAndHolds;
+
+std::string GetElfPath(std::string_view filename) {
+  return absl::StrCat(kDepotPath, "testfiles/", filename);
+}
+
+bool HasTohostSymbol(const std::string& elf_path) {
+  auto memory = std::make_unique<FlatDemandMemory>();
+  auto loader = std::make_unique<ElfProgramLoader>(memory.get());
+  auto status = loader->LoadProgram(elf_path);
+  if (!status.ok()) return false;
+  auto symbol = loader->GetSymbol("tohost");
+  return symbol.ok();
+}
 
 class CoralNPUV2SimulatorTest : public ::testing::Test {
  public:
@@ -210,6 +239,41 @@ TEST_F(CoralNPUV2SimulatorTest, TestRvvAddIntrinsicWriteRegister) {
   // Since we skipped over the memset body, the output array should be
   // uninitialized (0x0).
   EXPECT_THAT(ReadOutputArray(), IsOkAndHolds(Pointee(Each(0x0))));
+}
+
+TEST(CoralNPUV2SimulatorSemihostTest, TestHelloWordSemihost) {
+  using HaltReason = ::mpact::sim::generic::CoreDebugInterface::HaltReason;
+  using HaltReasonValueType = std::underlying_type_t<HaltReason>;
+  std::string elf_path = GetElfPath(kHelloSemihostElf);
+
+  if (!HasTohostSymbol(elf_path)) {
+    GTEST_SKIP() << "ELF " << elf_path
+                 << " does not have 'tohost' symbol, skipping HTIF test.";
+    return;
+  }
+
+  CoralNPUV2SimulatorOptions options;
+  options.semihost_htif = true;
+
+  auto simulator = std::make_unique<CoralNPUV2Simulator>(options);
+
+  ABSL_ASSERT_OK(simulator->LoadProgram(elf_path));
+
+  testing::internal::CaptureStdout();
+
+  // Run the simulation.
+  ABSL_ASSERT_OK(simulator->Run());
+  ABSL_ASSERT_OK(simulator->Wait());
+
+  std::string output = testing::internal::GetCapturedStdout();
+  EXPECT_THAT(output, HasSubstr("this looks like atv's magic"));
+
+  // The simulator requests kSemihostHaltRequest when semihosting exits (e.g.
+  // via exit syscall). However, this binary exits via mpause, which triggers
+  // kUserRequest.
+  ASSERT_OK_AND_ASSIGN(HaltReasonValueType halt_reason,
+                       simulator->top()->GetLastHaltReason());
+  EXPECT_EQ(halt_reason, *HaltReason::kUserRequest);
 }
 
 }  // namespace

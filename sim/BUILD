@@ -346,6 +346,7 @@ cc_library(
     deps = [
         ":coralnpu_v2_state",
         ":coralnpu_v2_user_decoder",
+        "@com_github_serge1_elfio//:elfio",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
@@ -353,6 +354,7 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:str_format",
         "@com_google_mpact-riscv//riscv:debug_command_shell",
+        "@com_google_mpact-riscv//riscv:riscv32_htif_semihost",
         "@com_google_mpact-riscv//riscv:riscv_fp_state",
         "@com_google_mpact-riscv//riscv:riscv_state",
         "@com_google_mpact-riscv//riscv:riscv_top",

@@ -47,9 +47,6 @@ namespace {
 using ::coralnpu::sim::CoralNPUV2State;
 using ::coralnpu::sim::CoralNPUV2StateConfig;
 using ::coralnpu::sim::CoralNPUV2UserDecoder;
-using ::coralnpu::sim::kCoralNPUV2DefaultDtcmLength;
-using ::coralnpu::sim::kCoralNPUV2DefaultDtcmStartAddress;
-using ::coralnpu::sim::kCoralNPUV2DefaultItcmStartAddress;
 using ::coralnpu::sim::kCoralnpuV2VectorByteLength;
 using ::mpact::sim::generic::DecoderInterface;
 using ::mpact::sim::generic::Instruction;
@@ -78,20 +75,20 @@ class MpactHandle {
 
   void Init(sim_config_t* /*absl_nullable*/ cosim_config) {
     CHECK(!is_initialized_) << "[DPI] Init: is_initialized_ is already true.";
-    CoralNPUV2StateConfig* state_config = nullptr;
+    std::unique_ptr<CoralNPUV2StateConfig> state_config;
     if (cosim_config != nullptr) {
-      state_config = new CoralNPUV2StateConfig{
-          .itcm_start_address = cosim_config->itcm_start_address,
-          .itcm_length = cosim_config->itcm_length,
-          .initial_misa_value = cosim_config->initial_misa_value,
-      };
+      state_config =
+          std::make_unique<CoralNPUV2StateConfig>(CoralNPUV2StateConfig{
+              .itcm_start_address = cosim_config->itcm_start_address,
+              .itcm_length = cosim_config->itcm_length,
+              .initial_misa_value = cosim_config->initial_misa_value,
+          });
+    } else {
+      state_config = std::make_unique<CoralNPUV2StateConfig>();
     }
-    state_ = CreateCoralNPUV2State("CoralNPUV2", RiscVXlen::RV32, memory_.get(),
-                                   /*atomic_memory=*/nullptr, state_config);
-    if (!state_config) {
-      state_->AddLsuAccessRange(kCoralNPUV2DefaultDtcmStartAddress,
-                                kCoralNPUV2DefaultDtcmLength);
-    }
+    state_ =
+        CreateCoralNPUV2State("CoralNPUV2", RiscVXlen::RV32, memory_.get(),
+                              /*atomic_memory=*/nullptr, state_config.get());
     // Make sure the architectural and abi register aliases are added.
     std::string reg_name;
     for (int i = 0; i < 32; i++) {
@@ -124,15 +121,10 @@ class MpactHandle {
       state_->Cease(inst);
       return true;
     });
-    uint32_t pc_value = cosim_config == nullptr
-                            ? kCoralNPUV2DefaultItcmStartAddress
-                            : cosim_config->itcm_start_address;
+    uint32_t pc_value = state_config->itcm_start_address;
     absl::Status pc_write = rv_top_->WriteRegister("pc", pc_value);
     CHECK_OK(pc_write) << "Error writing to pc.";
     is_initialized_ = true;
-    if (state_config) {
-      delete state_config;
-    }
   }
 
   absl::Status load_program(const std::string& elf_file) {
@@ -141,6 +133,12 @@ class MpactHandle {
       return absl::InternalError(
           absl::StrCat("Failed to load program '", elf_file,
                        "': ", load_result.status().message()));
+    }
+    uint64_t entry_point = *load_result;
+    absl::Status pc_write = rv_top_->WriteRegister("pc", entry_point);
+    if (!pc_write.ok()) {
+      return absl::InternalError(
+          absl::StrCat("Failed to write pc: ", pc_write.message()));
     }
     return absl::OkStatus();
   }
@@ -240,6 +238,15 @@ int mpact_add_load_store_range(uint32_t start_address, uint32_t length) {
 }
 
 int mpact_load_program(const char* elf_file) {
+  if (g_mpact_handle == nullptr) {
+    LOG(ERROR) << "[DPI] mpact_load_program: g_mpact_handle is null.";
+    return -1;
+  }
+  if (!g_mpact_handle->is_initialized()) {
+    LOG(ERROR)
+        << "[DPI] mpact_load_program: g_mpact_handle is not initialized.";
+    return -1;
+  }
   if (elf_file == nullptr) {
     LOG(ERROR) << "[DPI] mpact_init: received a null elf program.";
     return -1;

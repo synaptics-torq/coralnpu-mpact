@@ -103,6 +103,20 @@ void CoralNPUV2Sb(const Instruction* /*absl_nonnull*/ instruction);
 // Source operand 2: immediate operand containing the offset to store.
 // Source operand 3: float register containing the data to store.
 void CoralNPUV2Fsw(const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for jump and link (jal) instruction.
+// If the address access is valid, the control is transferred to the target
+// address. Otherwise, a trap is triggered.
+// J-type instruction, offsets PC by a signed 21-bit immediate.
+// Destination operand 1: scalar register containing the return address.
+void CoralNPUV2Jal(const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for jump and link register (jalr) instruction.
+// If the address access is valid, the control is transferred to the target
+// address. Otherwise, a trap is triggered.
+// I-type instruction, rs1 + imm12
+// Destination operand 1: scalar register containing the return address.
+void CoralNPUV2Jalr(const Instruction* /*absl_nonnull*/ instruction);
 }  // namespace coralnpu::sim
 
 #endif  // SIM_CORALNPU_V2_INSTRUCTIONS_H_

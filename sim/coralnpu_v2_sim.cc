@@ -51,9 +51,12 @@ ABSL_FLAG(uint32_t, initial_misa_value, 0x40201120,
           "Set the initial value of the misa register.");
 ABSL_FLAG(bool, exit_on_ebreak, false, "Exit on ebreak instruction.");
 
-ABSL_FLAG(std::vector<std::string>, allow_lsu_range, {"0x10000:0x8000"},
+ABSL_FLAG(std::vector<std::string>, allow_lsu_range,
+          std::vector<std::string>({"0x10000:0x8000", "0x20000000:0x400000"}),
           "Allowed LSU range. Format is start_address:length. "
           "Repeat this option to specify multiple ranges.");
+
+ABSL_FLAG(bool, semihost_htif, false, "HTIF semihosting");
 
 // Static pointer to the simulator instance. Used by the control-C handler.
 static CoralNPUV2Simulator* g_simulator = nullptr;
@@ -89,6 +92,7 @@ int main(int argc, char** argv) {
   options.initial_misa_value = absl::GetFlag(FLAGS_initial_misa_value);
   options.exit_on_ebreak = absl::GetFlag(FLAGS_exit_on_ebreak);
   options.lsu_access_ranges.clear();
+  options.semihost_htif = absl::GetFlag(FLAGS_semihost_htif);
 
   for (const std::string& range_str : absl::GetFlag(FLAGS_allow_lsu_range)) {
     std::vector<std::string> range = absl::StrSplit(range_str, ':');

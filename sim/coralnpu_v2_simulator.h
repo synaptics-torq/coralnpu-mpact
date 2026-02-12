@@ -32,7 +32,12 @@
 #include "mpact/sim/generic/data_buffer.h"
 #include "mpact/sim/generic/decoder_interface.h"
 #include "mpact/sim/util/memory/memory_interface.h"
+#include "mpact/sim/util/memory/memory_watcher.h"
 #include "mpact/sim/util/program_loader/elf_program_loader.h"
+
+namespace mpact::sim::riscv {
+class RiscV32HtifSemiHost;
+}  // namespace mpact::sim::riscv
 
 namespace coralnpu::sim {
 
@@ -44,6 +49,7 @@ struct CoralNPUV2SimulatorOptions {
   std::vector<CoralNPUV2LsuAccessRange> lsu_access_ranges = {
       {.start_address = 0x10000, .length = 0x8000}  // Default DTCM range.
   };
+  bool semihost_htif = false;
 };
 
 class CoralNPUV2Simulator {
@@ -51,7 +57,7 @@ class CoralNPUV2Simulator {
   using HaltReason = ::mpact::sim::generic::CoreDebugInterface::HaltReason;
 
   explicit CoralNPUV2Simulator(const CoralNPUV2SimulatorOptions& options);
-  ~CoralNPUV2Simulator() = default;
+  ~CoralNPUV2Simulator();
 
   // Loads the program from the given ELF file.
   // If entry_point is provided, it overrides the ELF entry point.
@@ -100,12 +106,14 @@ class CoralNPUV2Simulator {
 
  private:
   std::unique_ptr<mpact::sim::util::MemoryInterface> memory_;
+  std::unique_ptr<mpact::sim::util::MemoryWatcher> memory_watcher_;
   std::unique_ptr<CoralNPUV2State> state_;
   std::unique_ptr<mpact::sim::riscv::RiscVFPState> rv_fp_state_;
   std::unique_ptr<mpact::sim::riscv::RiscVVectorState> rvv_state_;
   std::unique_ptr<mpact::sim::generic::DecoderInterface> decoder_;
   std::unique_ptr<mpact::sim::riscv::RiscVTop> top_;
   std::unique_ptr<mpact::sim::util::ElfProgramLoader> elf_loader_;
+  std::unique_ptr<mpact::sim::riscv::RiscV32HtifSemiHost> htif_semihost_;
 
   CoralNPUV2SimulatorOptions options_;
 };
