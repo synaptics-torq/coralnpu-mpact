@@ -23,6 +23,7 @@
 #include <type_traits>
 #include <vector>
 
+#include "sim/coralnpu_v2_state.h"
 #include "sim/test/coralnpu_v2_rvv_add_intrinsic_generated.h"
 #include "googlemock/include/gmock/gmock.h"
 #include "googletest/include/gtest/gtest.h"
@@ -30,8 +31,11 @@
 #include "absl/status/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "riscv/riscv_state.h"
 #include "mpact/sim/generic/core_debug_interface.h"
 #include "mpact/sim/generic/data_buffer.h"
+#include "mpact/sim/generic/instruction.h"
+#include "mpact/sim/generic/type_helpers.h"
 #include "mpact/sim/util/memory/flat_demand_memory.h"
 #include "mpact/sim/util/program_loader/elf_program_loader.h"
 
@@ -69,6 +73,7 @@ namespace {
 
 using ::coralnpu::sim::CoralNPUV2Simulator;
 using ::coralnpu::sim::CoralNPUV2SimulatorOptions;
+using ::coralnpu::sim::MemoryPermission;
 using ::coralnpu::sim::test_data::coralnpu_v2_rvv_add_intrinsic::
     GetInstructions;
 using ::mpact::sim::generic::DataBuffer;
@@ -97,6 +102,11 @@ class CoralNPUV2SimulatorTest : public ::testing::Test {
  public:
   void SetUp() override {
     simulator_options_.exit_on_ebreak = true;
+    // Ensure we have a region that covers the instructions and data.
+    simulator_options_.memory_regions.push_back(
+        {.start_address = 0x0,
+         .length = 0x1000000,
+         .permissions = MemoryPermission::kReadWriteExecute});
     simulator_ = std::make_unique<CoralNPUV2Simulator>(simulator_options_);
 
     // Load the instructions into memory.
@@ -147,6 +157,15 @@ class CoralNPUV2SimulatorTest : public ::testing::Test {
   CoralNPUV2SimulatorOptions simulator_options_;
   std::unique_ptr<CoralNPUV2Simulator> simulator_;
 };
+
+TEST_F(CoralNPUV2SimulatorTest, TestMisaStretching) {
+  // The default options set initial_misa_value = 0x40201120.
+  // bit 30 is set. StretchMisa32 should move it to bit 62.
+  // For RV32, this results in the bit being preserved in the 32-bit register.
+  auto misa_status = simulator_->ReadRegister("misa");
+  ABSL_ASSERT_OK(misa_status);
+  EXPECT_EQ(*misa_status, 0x40201120ULL);
+}
 
 TEST_F(CoralNPUV2SimulatorTest, TestIntegerRegisters) {
   for (int i = 0; i < 32; ++i) {
@@ -239,6 +258,81 @@ TEST_F(CoralNPUV2SimulatorTest, TestRvvAddIntrinsicWriteRegister) {
   // Since we skipped over the memset body, the output array should be
   // uninitialized (0x0).
   EXPECT_THAT(ReadOutputArray(), IsOkAndHolds(Pointee(Each(0x0))));
+}
+
+TEST(CoralNPUV2SimulatorLoadProgramTest, TestLoadProgramPermissions) {
+  CoralNPUV2SimulatorOptions options;
+  // Clear default memory regions.
+  options.memory_regions.clear();
+  options.semihost_htif = true;
+  auto simulator = std::make_unique<CoralNPUV2Simulator>(options);
+
+  std::string elf_path = GetElfPath(kHelloSemihostElf);
+  ABSL_ASSERT_OK(simulator->LoadProgram(elf_path));
+
+  // The ELF has an executable segment. Check if it's executable.
+  // For coralnpu_v2_rvv_add_intrinsic.elf, the code is at 0x0.
+  EXPECT_TRUE(
+      simulator->state()->HasPermission(0x0, 4, MemoryPermission::kExecute));
+}
+
+TEST(CoralNPUV2StateTest, TestMultipleMpauseHandlers) {
+  using ::coralnpu::sim::CreateCoralNPUV2State;
+  using ::mpact::sim::generic::Instruction;
+  using ::mpact::sim::riscv::RiscVXlen;
+  using ::mpact::sim::util::FlatDemandMemory;
+
+  auto memory = std::make_unique<FlatDemandMemory>();
+  auto state = CreateCoralNPUV2State("test", RiscVXlen::RV32, memory.get());
+
+  int handler1_call_count = 0;
+  int handler2_call_count = 0;
+  int handler3_call_count = 0;
+
+  state->AddMpauseHandler([&](const Instruction*) {
+    handler1_call_count++;
+    return false;  // Should continue to next handler.
+  });
+  state->AddMpauseHandler([&](const Instruction*) {
+    handler2_call_count++;
+    return true;  // Should stop here.
+  });
+  state->AddMpauseHandler([&](const Instruction*) {
+    handler3_call_count++;
+    return true;  // Should not be called.
+  });
+
+  state->MPause(nullptr);
+
+  EXPECT_EQ(handler1_call_count, 1);
+  EXPECT_EQ(handler2_call_count, 1);
+  EXPECT_EQ(handler3_call_count, 0);
+}
+
+TEST(CoralNPUV2StateTest, TestMpauseDefaultTrap) {
+  using ::coralnpu::sim::CreateCoralNPUV2State;
+  using ::mpact::sim::generic::Instruction;
+  using ::mpact::sim::riscv::ExceptionCode;
+  using ::mpact::sim::riscv::RiscVXlen;
+  using ::mpact::sim::util::FlatDemandMemory;
+
+  auto memory = std::make_unique<FlatDemandMemory>();
+  auto state = CreateCoralNPUV2State("test", RiscVXlen::RV32, memory.get());
+
+  bool trap_called = false;
+  ExceptionCode exception_code = ExceptionCode::kIllegalInstruction;
+
+  state->set_on_trap(
+      [&](bool, uint64_t, uint64_t code, uint64_t, const Instruction*) -> bool {
+        trap_called = true;
+        exception_code = static_cast<ExceptionCode>(code);
+        return true;
+      });
+
+  state->MPause(nullptr);
+
+  EXPECT_TRUE(trap_called);
+  EXPECT_EQ(exception_code, ExceptionCode::kBreakpoint);
 }
 
 TEST(CoralNPUV2SimulatorSemihostTest, TestHelloWordSemihost) {

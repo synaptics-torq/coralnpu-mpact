@@ -27,6 +27,7 @@
 #include "absl/strings/str_format.h"
 #include "riscv/riscv_state.h"
 #include "mpact/sim/generic/data_buffer.h"
+#include "mpact/sim/generic/type_helpers.h"
 #include "mpact/sim/util/memory/flat_demand_memory.h"
 #include "mpact/sim/util/memory/memory_interface.h"
 
@@ -35,6 +36,7 @@ namespace {
 using ::coralnpu::sim::CoralNPUV2Encoding;
 using ::coralnpu::sim::CoralNPUV2State;
 using ::coralnpu::sim::CoralNPUV2UserDecoder;
+using ::coralnpu::sim::MemoryPermission;
 using ::coralnpu::sim::isa32_v2::DestOpEnum;
 using ::coralnpu::sim::isa32_v2::kDestOpNames;
 using ::coralnpu::sim::isa32_v2::kSourceOpNames;
@@ -53,12 +55,17 @@ constexpr uint32_t kNopAddiInstruction = 0b000000000000'00001'000'00001'0010011;
 // vsetivli x0, 4, e32, m1, ta, ma
 constexpr uint32_t kVsetivli_e32_m1 = 0b11'0000100000'00100'111'00000'1010111;
 
+constexpr uint32_t kMemoryStart = 0x0;
+constexpr uint32_t kMemorySize = 0x1000000;
+
 class CoralNPUV2UserDecoderFixture : public ::testing::Test {
  public:
   void SetUp() override {
     memory_ = std::make_unique<FlatDemandMemory>();
     state_ = std::make_unique<CoralNPUV2State>("CoralNPUV2", RiscVXlen::RV32,
                                                memory_.get());
+    state_->AddMemoryRegion(kMemoryStart, kMemorySize,
+                            MemoryPermission::kReadExecute);
     decoder_ =
         std::make_unique<CoralNPUV2UserDecoder>(state_.get(), memory_.get());
   }
@@ -193,7 +200,8 @@ TEST_F(CoralNPUV2UserDecoderFixture, DecodeMpauseInstruction) {
 
 TEST_F(CoralNPUV2UserDecoderFixture, InstructionItcmRangeDefault) {
   // Test the instruction decoding for the default ITCM range.
-  state_->set_itcm_length(0x2000);
+  state_->ClearMemoryRegions();
+  state_->AddMemoryRegion(0x0, 0x2000, MemoryPermission::kReadExecute);
 
   // Set up the memory with the nop instruction words.
   DataBuffer* inst_db = state_->db_factory()->Allocate<uint32_t>(1);
@@ -238,7 +246,8 @@ TEST_F(CoralNPUV2UserDecoderFixture, InstructionItcmRangeDefault) {
 
 TEST_F(CoralNPUV2UserDecoderFixture, InstructionItcmRangeHighMemory) {
   // Test the instruction decoding for the high memory ITCM range.
-  state_->set_itcm_length(0x100000);
+  state_->ClearMemoryRegions();
+  state_->AddMemoryRegion(0x0, 0x100000, MemoryPermission::kReadExecute);
 
   // Set up the memory with the nop instruction words.
   DataBuffer* inst_db = state_->db_factory()->Allocate<uint32_t>(1);

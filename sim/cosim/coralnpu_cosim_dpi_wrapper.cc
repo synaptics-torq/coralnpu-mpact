@@ -47,7 +47,8 @@ namespace {
 using ::coralnpu::sim::CoralNPUV2State;
 using ::coralnpu::sim::CoralNPUV2StateConfig;
 using ::coralnpu::sim::CoralNPUV2UserDecoder;
-using ::coralnpu::sim::kCoralnpuV2VectorByteLength;
+using ::coralnpu::sim::kCoralNPUV2VectorByteLength;
+using ::coralnpu::sim::MemoryPermission;
 using ::mpact::sim::generic::DecoderInterface;
 using ::mpact::sim::generic::Instruction;
 using ::mpact::sim::generic::operator*;  // NOLINT: clang-tidy false positive.
@@ -75,16 +76,22 @@ class MpactHandle {
 
   void Init(sim_config_t* /*absl_nullable*/ cosim_config) {
     CHECK(!is_initialized_) << "[DPI] Init: is_initialized_ is already true.";
-    std::unique_ptr<CoralNPUV2StateConfig> state_config;
+    auto state_config = std::make_unique<CoralNPUV2StateConfig>();
+    uint32_t pc_value = ::coralnpu::sim::kCoralNPUV2DefaultItcmStartAddress;
     if (cosim_config != nullptr) {
-      state_config =
-          std::make_unique<CoralNPUV2StateConfig>(CoralNPUV2StateConfig{
-              .itcm_start_address = cosim_config->itcm_start_address,
-              .itcm_length = cosim_config->itcm_length,
-              .initial_misa_value = cosim_config->initial_misa_value,
-          });
-    } else {
-      state_config = std::make_unique<CoralNPUV2StateConfig>();
+      state_config->initial_misa_value = cosim_config->initial_misa_value;
+      state_config->memory_regions = {
+          {.start_address = cosim_config->itcm_start_address,
+           .length = cosim_config->itcm_length,
+           .permissions = MemoryPermission::kReadExecute},
+          {.start_address = ::coralnpu::sim::kCoralNPUV2DefaultDtcmStartAddress,
+           .length = ::coralnpu::sim::kCoralNPUV2DefaultDtcmLength,
+           .permissions = MemoryPermission::kReadWrite},
+          {.start_address =
+               ::coralnpu::sim::kCoralNPUV2DefaultExtmemStartAddress,
+           .length = ::coralnpu::sim::kCoralNPUV2DefaultExtmemLength,
+           .permissions = MemoryPermission::kReadWrite}};
+      pc_value = cosim_config->itcm_start_address;
     }
     state_ =
         CreateCoralNPUV2State("CoralNPUV2", RiscVXlen::RV32, memory_.get(),
@@ -107,7 +114,7 @@ class MpactHandle {
       reg_name = absl::StrCat(RiscVState::kVregPrefix, i);
       [[maybe_unused]] RVVectorRegister* vreg =
           state_->AddRegister<RVVectorRegister>(reg_name,
-                                                kCoralnpuV2VectorByteLength);
+                                                kCoralNPUV2VectorByteLength);
     }
     rv_fp_state_ = CreateFPState(state_.get());
     state_->set_rv_fp(rv_fp_state_.get());
@@ -121,7 +128,6 @@ class MpactHandle {
       state_->Cease(inst);
       return true;
     });
-    uint32_t pc_value = state_config->itcm_start_address;
     absl::Status pc_write = rv_top_->WriteRegister("pc", pc_value);
     CHECK_OK(pc_write) << "Error writing to pc.";
     is_initialized_ = true;
@@ -166,7 +172,7 @@ class MpactHandle {
 
   std::unique_ptr<RiscVVectorState> CreateVectorState(CoralNPUV2State* state) {
     return std::make_unique<RiscVVectorState>(state,
-                                              kCoralnpuV2VectorByteLength);
+                                              kCoralNPUV2VectorByteLength);
   }
 
   std::unique_ptr<DecoderInterface> CreateDecoder(CoralNPUV2State* state,
@@ -233,7 +239,8 @@ int mpact_add_load_store_range(uint32_t start_address, uint32_t length) {
                  << "run before mpact_add_load_store_range.";
     return -2;
   }
-  g_mpact_handle->state()->AddLsuAccessRange(start_address, length);
+  g_mpact_handle->state()->AddMemoryRegion(start_address, length,
+                                           MemoryPermission::kReadWrite);
   return 0;
 }
 

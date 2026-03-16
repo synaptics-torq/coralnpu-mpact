@@ -25,6 +25,7 @@
 #include "riscv/riscv_state.h"
 #include "mpact/sim/generic/instruction.h"
 #include "mpact/sim/generic/program_error.h"
+#include "mpact/sim/generic/type_helpers.h"
 #include "mpact/sim/util/memory/memory_interface.h"
 
 namespace coralnpu::sim {
@@ -60,7 +61,9 @@ CoralNPUV2UserDecoder::CoralNPUV2UserDecoder(
 CoralNPUV2UserDecoder::~CoralNPUV2UserDecoder() { inst_db_->DecRef(); }
 
 Instruction* CoralNPUV2UserDecoder::DecodeInstruction(uint64_t address) {
-  if (!state_->IsAddressInItcmRange(address)) {
+  if (!state_->HasPermission(static_cast<uint32_t>(address),
+                             ::coralnpu::sim::kCoralNPUV2InstructionSize,
+                             MemoryPermission::kExecute)) {
     Instruction* inst = new Instruction(0, state_);
     inst->set_size(1);
     inst->SetDisassemblyString("Invalid instruction address");

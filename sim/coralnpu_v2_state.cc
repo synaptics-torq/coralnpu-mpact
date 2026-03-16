@@ -16,25 +16,36 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 
-#include "absl/base/nullability.h"
-#include "absl/log/log.h"
-#include "absl/strings/str_format.h"
-#include "absl/strings/string_view.h"
 #include "riscv/riscv_state.h"
+#include "mpact/sim/generic/instruction.h"
 #include "mpact/sim/util/memory/memory_interface.h"
 
 namespace coralnpu::sim {
+
+using ::mpact::sim::generic::Instruction;
+using ::mpact::sim::generic::operator*;  // NOLINT: clang-tidy false positive.
+using ::mpact::sim::riscv::ExceptionCode;
+using ::mpact::sim::riscv::RiscVState;
 using ::mpact::sim::riscv::RiscVXlen;
-using ::mpact::sim::util::AtomicMemoryOpInterface;
 using ::mpact::sim::util::MemoryInterface;
 
-CoralNPUV2State::CoralNPUV2State(
-    absl::string_view id, RiscVXlen xlen, MemoryInterface* /*absl_nonnull*/ memory,
-    AtomicMemoryOpInterface* /*absl_nullable*/ atomic_memory)
-    : RiscVState(id, xlen, memory, atomic_memory) {
-  set_vector_register_width(kCoralnpuV2VectorByteLength);
+namespace {
+// StretchMisa32 stretches the 32-bit value into a 64-bit value by moving the
+// upper 2 bits of the 32-bit input to the upper 2 bits of the 64-bit output.
+inline uint64_t StretchMisa32(uint32_t value) {
+  uint64_t value64 = static_cast<uint64_t>(value);
+  value64 = ((value64 & 0xc000'0000) << 32) | (value64 & 0x03ff'ffff);
+  return value64;
 }
+}  // namespace
+
+CoralNPUV2State::CoralNPUV2State(
+    std::string id, RiscVXlen xlen, MemoryInterface* memory,
+    ::mpact::sim::util::AtomicMemoryOpInterface* atomic_memory)
+    : RiscVState(id, xlen, memory, atomic_memory) {}
+
 CoralNPUV2State::~CoralNPUV2State() = default;
 
 void CoralNPUV2State::MPause(const Instruction* instruction) {
@@ -43,48 +54,45 @@ void CoralNPUV2State::MPause(const Instruction* instruction) {
   }
   // Set the return address to the current instruction.
   const uint64_t epc = (instruction != nullptr) ? instruction->address() : 0;
-  Trap(/*is_interrupt=*/false, /*trap_value=*/0, /*exception_code=*/3, epc,
-       instruction);
+  Trap(/*is_interrupt=*/false, /*trap_value=*/0, *ExceptionCode::kBreakpoint,
+       epc, instruction);
 }
 
-bool CoralNPUV2State::IsLsuAccessValid(uint32_t address, uint32_t size) {
+// Returns true if the requested memory access has the required permissions.
+// Note: This implementation currently requires the entire access to be
+// contained within a single memory region. If an access spans across multiple
+// regions, it will return false even if both regions have the required
+// permissions.
+bool CoralNPUV2State::HasPermission(uint32_t address, uint32_t size,
+                                    MemoryPermission permissions) const {
   uint64_t request_start_address = address;
-  uint64_t request_end_address = address + size;
-  for (const auto& range : lsu_access_ranges_) {
-    uint64_t access_start_address = range.start_address;
-    uint64_t access_end_address = range.start_address + range.length;
-    if (request_start_address >= access_start_address &&
-        request_end_address <= access_end_address) {
-      return true;
+  uint64_t request_end_address = static_cast<uint64_t>(address) + size;
+  for (const auto& region : memory_regions_) {
+    uint64_t region_start_address = region.start_address;
+    uint64_t region_end_address =
+        static_cast<uint64_t>(region.start_address) + region.length;
+    if (request_start_address >= region_start_address &&
+        request_end_address <= region_end_address) {
+      return (region.permissions & permissions) == permissions;
     }
   }
-  LOG(ERROR) << "LSU access invalid: " << absl::StrFormat("0x%08x", address)
-             << " " << absl::StrFormat("0x%08x", size);
   return false;
 }
 
 std::unique_ptr<CoralNPUV2State> CreateCoralNPUV2State(
-    absl::string_view id, ::mpact::sim::riscv::RiscVXlen xlen,
-    ::mpact::sim::util::MemoryInterface* /*absl_nonnull*/ memory,
-    ::mpact::sim::util::AtomicMemoryOpInterface* /*absl_nullable*/ atomic_memory,
-    const CoralNPUV2StateConfig* /*absl_nullable*/ config) {
+    std::string id, RiscVXlen xlen, MemoryInterface* memory,
+    ::mpact::sim::util::AtomicMemoryOpInterface* atomic_memory,
+    const CoralNPUV2StateConfig* config) {
   auto state =
       std::make_unique<CoralNPUV2State>(id, xlen, memory, atomic_memory);
   if (config != nullptr) {
-    state->set_itcm_start_address(config->itcm_start_address);
-    state->set_itcm_length(config->itcm_length);
-    state->misa()->Set(internal::StretchMisa32(config->initial_misa_value));
-    for (const auto& range : config->lsu_access_ranges) {
-      state->AddLsuAccessRange(range.start_address, range.length);
+    state->misa()->Set(StretchMisa32(config->initial_misa_value));
+    for (const auto& region : config->memory_regions) {
+      state->AddMemoryRegion(region.start_address, region.length,
+                             region.permissions);
     }
   }
   return state;
-}
-
-bool CoralNPUV2State::IsJumpValid(uint32_t address) {
-  // Can't jump outside of ITCM
-  return (address >= itcm_start_address() &&
-          address < (itcm_start_address() + itcm_length()));
 }
 
 }  // namespace coralnpu::sim

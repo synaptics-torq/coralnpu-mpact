@@ -19,23 +19,25 @@
 
 #include "sim/coralnpu_v2_state.h"
 #include "absl/base/nullability.h"
-#include "absl/log/log.h"
 #include "riscv/riscv_f_instructions.h"
 #include "riscv/riscv_i_instructions.h"
 #include "riscv/riscv_instruction_helpers.h"
 #include "riscv/riscv_register.h"
 #include "riscv/riscv_state.h"
 #include "mpact/sim/generic/instruction.h"
+#include "mpact/sim/generic/operand_interface.h"
+#include "mpact/sim/generic/type_helpers.h"
 
 namespace {
 using ::coralnpu::sim::CoralNPUV2State;
+using ::coralnpu::sim::MemoryPermission;
 using ::mpact::sim::generic::Instruction;
 using ::mpact::sim::riscv::ExceptionCode;
 using ::mpact::sim::generic::operator*;  // NOLINT: clang-tidy false positive.
 
-template <typename Register, typename ValueType,
-          ExceptionCode fault_exception_code>
-bool AccessCheck(const Instruction* /*absl_nonnull*/ instruction) {
+template <typename Register, typename ValueType>
+bool AccessCheck(const Instruction* /*absl_nonnull*/ instruction,
+                 ExceptionCode fault_exception_code) {
   using RegVal = typename Register::ValueType;
   using URegVal = typename std::make_unsigned<RegVal>::type;
   URegVal base = ::mpact::sim::generic::GetInstructionSource<URegVal>(
@@ -44,15 +46,11 @@ bool AccessCheck(const Instruction* /*absl_nonnull*/ instruction) {
       instruction, /*index=*/1);
   URegVal address = base + offset;
   CoralNPUV2State* state = static_cast<CoralNPUV2State*>(instruction->state());
-  uint32_t itcm_start = state->itcm_start_address();
-  uint32_t itcm_end = itcm_start + state->itcm_length();
-  // Always allow ITCM loads.
-  if (address >= itcm_start && address + sizeof(ValueType) <= itcm_end) {
-    if (fault_exception_code == ExceptionCode::kLoadAccessFault) {
-      return true;
-    }
-  }
-  if (!state->IsLsuAccessValid(address, sizeof(ValueType))) {
+  MemoryPermission permission =
+      (fault_exception_code == ExceptionCode::kLoadAccessFault)
+          ? MemoryPermission::kRead
+          : MemoryPermission::kWrite;
+  if (!state->HasPermission(address, sizeof(ValueType), permission)) {
     state->Trap(/*is_interrupt=*/false, /*trap_value=*/address,
                 *fault_exception_code,
                 /*epc=*/instruction->address(), instruction);
@@ -61,11 +59,13 @@ bool AccessCheck(const Instruction* /*absl_nonnull*/ instruction) {
   return true;
 }
 
-template <ExceptionCode fault_exception_code>
 bool IsJumpAllowed(uint64_t address,
-                   const Instruction* /*absl_nonnull*/ instruction) {
+                   const Instruction* /*absl_nonnull*/ instruction,
+                   ExceptionCode fault_exception_code) {
   CoralNPUV2State* state = static_cast<CoralNPUV2State*>(instruction->state());
-  if (!state->IsJumpValid(address)) {
+  if (!state->HasPermission(address,
+                            ::coralnpu::sim::kCoralNPUV2InstructionSize,
+                            MemoryPermission::kExecute)) {
     state->Trap(/*is_interrupt=*/false, /*trap_value=*/address,
                 *fault_exception_code,
                 /*epc=*/address, instruction);
@@ -73,11 +73,11 @@ bool IsJumpAllowed(uint64_t address,
   }
   return true;
 }
+
 }  // namespace
 
 namespace coralnpu::sim {
 
-using ::coralnpu::sim::CoralNPUV2State;
 using ::mpact::sim::generic::Instruction;
 using ::mpact::sim::riscv::RV32Register;
 using ::mpact::sim::riscv::RVFpRegister;
@@ -88,81 +88,72 @@ void CoralNPUV2Mpause(const Instruction* /*absl_nonnull*/ instruction) {
 }
 
 void CoralNPUV2Lw(const Instruction* /*absl_nonnull*/ instruction) {
-  bool is_load_allowed =
-      AccessCheck<RV32Register, int32_t, ExceptionCode::kLoadAccessFault>(
-          instruction);
+  bool is_load_allowed = AccessCheck<RV32Register, int32_t>(
+      instruction, ExceptionCode::kLoadAccessFault);
   if (is_load_allowed) {
     ::mpact::sim::riscv::RVLoad<RV32Register, int32_t>(instruction);
   }
 }
 
 void CoralNPUV2Lh(const Instruction* /*absl_nonnull*/ instruction) {
-  bool is_load_allowed =
-      AccessCheck<RV32Register, int16_t, ExceptionCode::kLoadAccessFault>(
-          instruction);
+  bool is_load_allowed = AccessCheck<RV32Register, int16_t>(
+      instruction, ExceptionCode::kLoadAccessFault);
   if (is_load_allowed) {
     ::mpact::sim::riscv::RVLoad<RV32Register, int16_t>(instruction);
   }
 }
 
 void CoralNPUV2Lhu(const Instruction* /*absl_nonnull*/ instruction) {
-  bool is_load_allowed =
-      AccessCheck<RV32Register, uint16_t, ExceptionCode::kLoadAccessFault>(
-          instruction);
+  bool is_load_allowed = AccessCheck<RV32Register, uint16_t>(
+      instruction, ExceptionCode::kLoadAccessFault);
   if (is_load_allowed) {
     ::mpact::sim::riscv::RVLoad<RV32Register, uint16_t>(instruction);
   }
 }
 
 void CoralNPUV2Lb(const Instruction* /*absl_nonnull*/ instruction) {
-  bool is_load_allowed =
-      AccessCheck<RV32Register, int8_t, ExceptionCode::kLoadAccessFault>(
-          instruction);
+  bool is_load_allowed = AccessCheck<RV32Register, int8_t>(
+      instruction, ExceptionCode::kLoadAccessFault);
   if (is_load_allowed) {
     ::mpact::sim::riscv::RVLoad<RV32Register, int8_t>(instruction);
   }
 }
 
 void CoralNPUV2Lbu(const Instruction* /*absl_nonnull*/ instruction) {
-  bool is_load_allowed =
-      AccessCheck<RV32Register, uint8_t, ExceptionCode::kLoadAccessFault>(
-          instruction);
+  bool is_load_allowed = AccessCheck<RV32Register, uint8_t>(
+      instruction, ExceptionCode::kLoadAccessFault);
   if (is_load_allowed) {
     ::mpact::sim::riscv::RVLoad<RV32Register, uint8_t>(instruction);
   }
 }
 
 void CoralNPUV2Sw(const Instruction* /*absl_nonnull*/ instruction) {
-  bool is_store_allowed =
-      AccessCheck<RV32Register, uint32_t, ExceptionCode::kStoreAccessFault>(
-          instruction);
+  bool is_store_allowed = AccessCheck<RV32Register, uint32_t>(
+      instruction, ExceptionCode::kStoreAccessFault);
   if (is_store_allowed) {
     ::mpact::sim::riscv::RVStore<RV32Register, uint32_t>(instruction);
   }
 }
 
 void CoralNPUV2Sh(const Instruction* /*absl_nonnull*/ instruction) {
-  bool is_store_allowed =
-      AccessCheck<RV32Register, uint16_t, ExceptionCode::kStoreAccessFault>(
-          instruction);
+  bool is_store_allowed = AccessCheck<RV32Register, uint16_t>(
+      instruction, ExceptionCode::kStoreAccessFault);
   if (is_store_allowed) {
     ::mpact::sim::riscv::RVStore<RV32Register, uint16_t>(instruction);
   }
 }
 
 void CoralNPUV2Sb(const Instruction* /*absl_nonnull*/ instruction) {
-  bool is_store_allowed =
-      AccessCheck<RV32Register, uint8_t, ExceptionCode::kStoreAccessFault>(
-          instruction);
+  bool is_store_allowed = AccessCheck<RV32Register, uint8_t>(
+      instruction, ExceptionCode::kStoreAccessFault);
   if (is_store_allowed) {
     ::mpact::sim::riscv::RVStore<RV32Register, uint8_t>(instruction);
   }
 }
 
 void CoralNPUV2Fsw(const Instruction* /*absl_nonnull*/ instruction) {
-  bool is_store_allowed =
-      AccessCheck<RVFpRegister, uint64_t, ExceptionCode::kStoreAccessFault>(
-          instruction);
+  bool is_store_allowed = AccessCheck<RVFpRegister, uint64_t>(
+      instruction, ExceptionCode::kStoreAccessFault);
   if (is_store_allowed) {
     ::mpact::sim::riscv::RV32::RiscVFSw(instruction);
   }
@@ -174,8 +165,8 @@ void CoralNPUV2Jal(const Instruction* /*absl_nonnull*/ instruction) {
   RegVal offset =
       ::mpact::sim::generic::GetInstructionSource<RegVal>(instruction, 0);
   URegVal address = instruction->address() + offset;
-  if (IsJumpAllowed<ExceptionCode::kInstructionAccessFault>(address,
-                                                            instruction)) {
+  if (IsJumpAllowed(address, instruction,
+                    ExceptionCode::kInstructionAccessFault)) {
     ::mpact::sim::riscv::RV32::RiscVIJal(instruction);
   }
 }
@@ -188,12 +179,12 @@ void CoralNPUV2Jalr(const Instruction* /*absl_nonnull*/ instruction) {
   RegVal offset =
       ::mpact::sim::generic::GetInstructionSource<RegVal>(instruction, 1);
   URegVal address = base + offset;
-  if (IsJumpAllowed<ExceptionCode::kInstructionAccessFault>(address,
-                                                            instruction)) {
+  if (IsJumpAllowed(address, instruction,
+                    ExceptionCode::kInstructionAccessFault)) {
     ::mpact::sim::riscv::RV32::RiscVIJalr(instruction);
     return;
   }
-  // If jump is not allowed, JalrAccessCheck has already called Trap.
+  // If jump is not allowed, IsJumpAllowed has already called Trap.
   // We still need to update rd with pc+4 for Jalr.
   using RegType = RV32Register;
   using ValueType = typename RegType::ValueType;

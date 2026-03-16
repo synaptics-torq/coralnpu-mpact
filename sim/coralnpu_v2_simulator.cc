@@ -39,6 +39,7 @@
 #include "riscv/riscv_vector_state.h"
 #include "mpact/sim/generic/data_buffer.h"
 #include "mpact/sim/generic/instruction.h"
+#include "mpact/sim/generic/type_helpers.h"
 #include "mpact/sim/util/memory/flat_demand_memory.h"
 #include "mpact/sim/util/memory/memory_watcher.h"
 #include "mpact/sim/util/program_loader/elf_program_loader.h"
@@ -59,11 +60,12 @@ using ::mpact::sim::riscv::RVVectorRegister;
 using ::mpact::sim::util::ElfProgramLoader;
 using ::mpact::sim::util::FlatDemandMemory;
 using ::mpact::sim::util::MemoryWatcher;
+using ::mpact::sim::generic::operator*;  // NOLINT: clang-tidy false positive.
 
 namespace {
 // Helper function to get the magic semihosting addresses from the loader.
-static bool GetMagicAddresses(ElfProgramLoader* loader,
-                              RiscV32HtifSemiHost::SemiHostAddresses* magic) {
+bool GetMagicAddresses(ElfProgramLoader* loader,
+                       RiscV32HtifSemiHost::SemiHostAddresses* magic) {
   auto result = loader->GetSymbol("tohost_ready");
   if (!result.ok()) return false;
   magic->tohost_ready = result.value().first;
@@ -96,15 +98,9 @@ CoralNPUV2Simulator::CoralNPUV2Simulator(
   memory_ = std::make_unique<FlatDemandMemory>();
 
   CoralNPUV2StateConfig config = {
-      .itcm_start_address = options_.itcm_start_address,
-      .itcm_length = options_.itcm_length,
       .initial_misa_value = options_.initial_misa_value,
-      .lsu_access_ranges = options_.lsu_access_ranges,
+      .memory_regions = options_.memory_regions,
   };
-  for (const auto& range : options_.lsu_access_ranges) {
-    config.lsu_access_ranges.push_back(
-        {.start_address = range.start_address, .length = range.length});
-  }
   state_ =
       CreateCoralNPUV2State("CoralNPUV2", mpact::sim::riscv::RiscVXlen::RV32,
                             memory_.get(), /*atomic_memory=*/nullptr, &config);
@@ -124,7 +120,7 @@ CoralNPUV2Simulator::CoralNPUV2Simulator(
 
     reg_name = absl::StrCat(RiscVState::kVregPrefix, i);
     state_->AddRegister<RVVectorRegister>(reg_name,
-                                          kCoralnpuV2VectorByteLength);
+                                          kCoralNPUV2VectorByteLength);
   }
 
   // Create the floating point and vector states.
@@ -132,7 +128,7 @@ CoralNPUV2Simulator::CoralNPUV2Simulator(
       std::make_unique<RiscVFPState>(state_->csr_set(), state_.get());
   state_->set_rv_fp(rv_fp_state_.get());
   rvv_state_ = std::make_unique<RiscVVectorState>(state_.get(),
-                                                  kCoralnpuV2VectorByteLength);
+                                                  kCoralNPUV2VectorByteLength);
 
   decoder_ =
       std::make_unique<CoralNPUV2UserDecoder>(state_.get(), memory_.get());
@@ -187,8 +183,8 @@ absl::Status CoralNPUV2Simulator::LoadProgram(
   if (options_.semihost_htif) {
     // When semihosting is enabled, we need to allow access to the program's
     // memory regions (data, bss, heap, stack, htif buffers). We use the
-    // elf_loader to find the program's LOAD segments and add them as LSU
-    // access ranges.
+    // elf_loader to find the program's LOAD segments and add them as memory
+    // regions.
     for (const auto& segment : elf_loader_->elf_reader()->segments) {
       if (segment->get_type() == ELFIO::PT_LOAD) {
         uint64_t addr = segment->get_physical_address();
@@ -197,10 +193,17 @@ absl::Status CoralNPUV2Simulator::LoadProgram(
         }
         uint64_t size = segment->get_memory_size();
         if (size > 0) {
+          MemoryPermission permissions = MemoryPermission::kNone;
+          uint32_t flags = segment->get_flags();
+          if (flags & ELFIO::PF_R) permissions |= MemoryPermission::kRead;
+          if (flags & ELFIO::PF_W) permissions |= MemoryPermission::kWrite;
+          if (flags & ELFIO::PF_X) permissions |= MemoryPermission::kExecute;
+
           LOG(INFO) << absl::StrFormat(
-              "Adding LSU access range for segment: 0x%08x:0x%08x", addr, size);
-          state_->AddLsuAccessRange(static_cast<uint32_t>(addr),
-                                    static_cast<uint32_t>(size));
+              "Adding memory region for segment: 0x%08x:0x%08x (0x%x)", addr,
+              size, static_cast<uint8_t>(permissions));
+          state_->AddMemoryRegion(static_cast<uint32_t>(addr),
+                                  static_cast<uint32_t>(size), permissions);
         }
       }
     }

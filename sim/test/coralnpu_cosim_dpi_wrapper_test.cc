@@ -168,7 +168,7 @@ TEST_F(CosimFixture, MpauseHaltsCosimulation) {
 }
 
 TEST_F(CosimFixture, GetPcWithCustomConfig) {
-  uint32_t test_itcm_start_address = 12345;
+  uint32_t test_itcm_start_address = 0x4000;
   sim_config_t config_data = {
       .itcm_start_address = test_itcm_start_address,
       .itcm_length = 0x100000,
@@ -178,6 +178,37 @@ TEST_F(CosimFixture, GetPcWithCustomConfig) {
   uint32_t pc_value = 1;
   EXPECT_EQ(mpact_get_register("pc", &pc_value), 0);
   EXPECT_EQ(pc_value, test_itcm_start_address);
+
+  // This should work if the memory region was correctly updated.
+  // If not, WriteMemory at test_itcm_start_address might work
+  // (FlatDemandMemory), but Step(1) will trigger a fetch that fails permission
+  // check and traps.
+  EXPECT_EQ(mpact_step_wrapper(kNopInstruction), 0);
+  EXPECT_EQ(mpact_get_register("pc", &pc_value), 0);
+  EXPECT_EQ(pc_value, test_itcm_start_address + 4);
+}
+
+// Verify that configuring ITCM does not affect DTCM.
+TEST_F(CosimFixture, TestDtcmAccessAfterCustomItcmConfig) {
+  uint32_t test_itcm_start_address = 0x4000;
+  sim_config_t config_data = {
+      .itcm_start_address = test_itcm_start_address,
+      .itcm_length = 0x1000,
+      .initial_misa_value = 0x40201120,
+  };
+  EXPECT_EQ(mpact_config(&config_data), 0);
+
+  // Try to write to the default DTCM address (0x10000).
+  // This should work if DTCM was not moved.
+  uint32_t pc_value = 0;
+  ASSERT_EQ(mpact_set_register("x1", 0x01234567), 0);
+  ASSERT_EQ(mpact_set_register("x2", 0x10000), 0);
+  ASSERT_EQ(mpact_step_wrapper(kStoreX1ToX2), 0);
+  ASSERT_EQ(mpact_get_register("pc", &pc_value), 0);
+
+  // The program counter will only go to the next instruction if the store
+  // instruction didn't trigger a trap.
+  EXPECT_EQ(pc_value, test_itcm_start_address + 4);
 }
 
 // Without calling mpact_config(), the simulator should use the default

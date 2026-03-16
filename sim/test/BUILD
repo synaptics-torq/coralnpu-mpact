@@ -202,6 +202,18 @@ cc_test(
 )
 
 cc_test(
+    name = "coralnpu_v2_state_test",
+    size = "small",
+    srcs = ["coralnpu_v2_state_test.cc"],
+    deps = [
+        "//sim:coralnpu_v2_state",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_mpact-riscv//riscv:riscv_state",
+        "@com_google_mpact-sim//mpact/sim/util/memory",
+    ],
+)
+
+cc_test(
     name = "coralnpu_v2_user_decoder_test",
     srcs = ["coralnpu_v2_user_decoder_test.cc"],
     copts = ["-Werror"],
@@ -215,6 +227,7 @@ cc_test(
         "@com_google_googletest//:gtest_main",
         "@com_google_mpact-riscv//riscv:riscv_state",
         "@com_google_mpact-sim//mpact/sim/generic:core",
+        "@com_google_mpact-sim//mpact/sim/generic:type_helpers",
         "@com_google_mpact-sim//mpact/sim/util/memory",
     ],
 )
@@ -267,11 +280,18 @@ cc_test(
         "//sim:coralnpu_v2_instructions",
         "//sim:coralnpu_v2_state",
         "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_absl//absl/status:status_matchers",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/types:span",
         "@com_google_googletest//:gtest_main",
         "@com_google_mpact-riscv//riscv:riscv_g",
         "@com_google_mpact-riscv//riscv:riscv_state",
+        "@com_google_mpact-riscv//riscv:riscv_v",
+        "@com_google_mpact-sim//mpact/sim/generic:arch_state",
         "@com_google_mpact-sim//mpact/sim/generic:core",
         "@com_google_mpact-sim//mpact/sim/generic:instruction",
+        "@com_google_mpact-sim//mpact/sim/generic:type_helpers",
         "@com_google_mpact-sim//mpact/sim/util/memory",
     ],
 )
@@ -299,13 +319,17 @@ cc_test(
     deps = [
         ":coralnpu_v2_rvv_add_intrinsic_generated",
         "//sim:coralnpu_v2_simulator",
+        "//sim:coralnpu_v2_state",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:status_matchers",
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/strings",
         "@com_google_googletest//:gtest_main",
+        "@com_google_mpact-riscv//riscv:riscv_state",
         "@com_google_mpact-sim//mpact/sim/generic:core",
         "@com_google_mpact-sim//mpact/sim/generic:core_debug_interface",
+        "@com_google_mpact-sim//mpact/sim/generic:instruction",
+        "@com_google_mpact-sim//mpact/sim/generic:type_helpers",
         "@com_google_mpact-sim//mpact/sim/util/memory",
         "@com_google_mpact-sim//mpact/sim/util/program_loader:elf_loader",
     ],

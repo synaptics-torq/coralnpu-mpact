@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "sim/coralnpu_v2_simulator.h"
+#include "sim/coralnpu_v2_state.h"
 #include "absl/flags/flag.h"
 #include "absl/flags/marshalling.h"
 #include "absl/flags/parse.h"
@@ -33,9 +34,11 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "mpact/sim/generic/type_helpers.h"
 
 using ::coralnpu::sim::CoralNPUV2Simulator;
 using ::coralnpu::sim::CoralNPUV2SimulatorOptions;
+using ::mpact::sim::generic::operator*;  // NOLINT: clang-tidy false positive.
 
 // Flags for specifying interactive mode.
 ABSL_FLAG(bool, i, false, "Interactive mode");
@@ -44,17 +47,15 @@ ABSL_FLAG(bool, interactive, false, "Interactive mode");
 ABSL_FLAG(std::optional<uint32_t>, entry_point, std::nullopt,
           "Optionally set the entry point of the program.");
 
-ABSL_FLAG(uint32_t, itcm_start_address, 0x0,
-          "Set the start address of the ITCM range.");
-ABSL_FLAG(uint32_t, itcm_length, 0x2000, "Set the length of the ITCM range.");
 ABSL_FLAG(uint32_t, initial_misa_value, 0x40201120,
           "Set the initial value of the misa register.");
 ABSL_FLAG(bool, exit_on_ebreak, false, "Exit on ebreak instruction.");
 
-ABSL_FLAG(std::vector<std::string>, allow_lsu_range,
-          std::vector<std::string>({"0x10000:0x8000", "0x20000000:0x400000"}),
-          "Allowed LSU range. Format is start_address:length. "
-          "Repeat this option to specify multiple ranges.");
+ABSL_FLAG(std::vector<std::string>, allow_memory_region,
+          std::vector<std::string>({"0x0:0x2000:rx", "0x10000:0x8000:rw",
+                                    "0x20000000:0x400000:rw"}),
+          "Allowed memory region. Format is start_address:length:rwx. "
+          "Repeat this option to specify multiple regions.");
 
 ABSL_FLAG(bool, semihost_htif, false, "HTIF semihosting");
 
@@ -87,32 +88,46 @@ int main(int argc, char** argv) {
   std::string file_name = argv[1];
 
   CoralNPUV2SimulatorOptions options;
-  options.itcm_start_address = absl::GetFlag(FLAGS_itcm_start_address);
-  options.itcm_length = absl::GetFlag(FLAGS_itcm_length);
   options.initial_misa_value = absl::GetFlag(FLAGS_initial_misa_value);
   options.exit_on_ebreak = absl::GetFlag(FLAGS_exit_on_ebreak);
-  options.lsu_access_ranges.clear();
+  options.memory_regions.clear();
   options.semihost_htif = absl::GetFlag(FLAGS_semihost_htif);
 
-  for (const std::string& range_str : absl::GetFlag(FLAGS_allow_lsu_range)) {
-    std::vector<std::string> range = absl::StrSplit(range_str, ':');
-    if (range.size() != 2) {
-      LOG(ERROR) << "Invalid LSU range: " << range_str << ". The expected "
-                 << "format is start_address:length. Use hex or decimal "
-                 << "values.";
+  for (const std::string& region_str :
+       absl::GetFlag(FLAGS_allow_memory_region)) {
+    std::vector<std::string> parts = absl::StrSplit(region_str, ':');
+    if (parts.size() != 3) {
+      LOG(ERROR) << "Invalid memory region: " << region_str << ". The expected "
+                 << "format is start_address:length:rwx.";
       return -1;
     }
     uint32_t start, length;
     std::string error;
-    if (!absl::ParseFlag(range[0], &start, &error)) {
-      LOG(ERROR) << "Invalid LSU range: " << range_str << " " << error;
+    if (!absl::ParseFlag(parts[0], &start, &error)) {
+      LOG(ERROR) << "Invalid memory region start: " << parts[0] << " " << error;
       return -1;
     }
-    if (!absl::ParseFlag(range[1], &length, &error)) {
-      LOG(ERROR) << "Invalid LSU range: " << range_str << " " << error;
+    if (!absl::ParseFlag(parts[1], &length, &error)) {
+      LOG(ERROR) << "Invalid memory region length: " << parts[1] << " "
+                 << error;
       return -1;
     }
-    options.lsu_access_ranges.push_back({start, length});
+    ::coralnpu::sim::MemoryPermission permissions =
+        ::coralnpu::sim::MemoryPermission::kNone;
+    for (char c : parts[2]) {
+      if (c == 'r') {
+        permissions |= ::coralnpu::sim::MemoryPermission::kRead;
+      } else if (c == 'w') {
+        permissions |= ::coralnpu::sim::MemoryPermission::kWrite;
+      } else if (c == 'x') {
+        permissions |= ::coralnpu::sim::MemoryPermission::kExecute;
+      } else {
+        LOG(ERROR) << "Invalid permission char: " << c;
+        return -1;
+      }
+    }
+    options.memory_regions.push_back(
+        {.start_address = start, .length = length, .permissions = permissions});
   }
 
   CoralNPUV2Simulator simulator(options);

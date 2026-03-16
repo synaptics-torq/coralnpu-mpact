@@ -42,13 +42,18 @@ class RiscV32HtifSemiHost;
 namespace coralnpu::sim {
 
 struct CoralNPUV2SimulatorOptions {
-  uint32_t itcm_start_address = 0x0;
-  uint32_t itcm_length = 0x2000;
   uint32_t initial_misa_value = 0x40201120;
   bool exit_on_ebreak = false;
-  std::vector<CoralNPUV2LsuAccessRange> lsu_access_ranges = {
-      {.start_address = 0x10000, .length = 0x8000}  // Default DTCM range.
-  };
+  std::vector<CoralNPUV2MemoryRegion> memory_regions = {
+      {.start_address = kCoralNPUV2DefaultItcmStartAddress,
+       .length = kCoralNPUV2DefaultItcmLength,
+       .permissions = MemoryPermission::kReadExecute},
+      {.start_address = kCoralNPUV2DefaultDtcmStartAddress,
+       .length = kCoralNPUV2DefaultDtcmLength,
+       .permissions = MemoryPermission::kReadWrite},
+      {.start_address = kCoralNPUV2DefaultExtmemStartAddress,
+       .length = kCoralNPUV2DefaultExtmemLength,
+       .permissions = MemoryPermission::kReadWrite}};
   bool semihost_htif = false;
 };
 

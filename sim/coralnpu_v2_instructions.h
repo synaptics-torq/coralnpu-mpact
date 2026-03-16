@@ -117,6 +117,7 @@ void CoralNPUV2Jal(const Instruction* /*absl_nonnull*/ instruction);
 // I-type instruction, rs1 + imm12
 // Destination operand 1: scalar register containing the return address.
 void CoralNPUV2Jalr(const Instruction* /*absl_nonnull*/ instruction);
+
 }  // namespace coralnpu::sim
 
 #endif  // SIM_CORALNPU_V2_INSTRUCTIONS_H_
