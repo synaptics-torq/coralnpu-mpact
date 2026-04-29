@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef LEARNING_BRAIN_RESEARCH_KELVIN_SIM_RENODE_CORALNPU_RENODE_H_
-#define LEARNING_BRAIN_RESEARCH_KELVIN_SIM_RENODE_CORALNPU_RENODE_H_
+#ifndef SIM_RENODE_CORALNPU_RENODE_H_
+#define SIM_RENODE_CORALNPU_RENODE_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -109,4 +109,4 @@ class CoralNPURenode : public renode::RenodeDebugInterface {
 
 }  // namespace coralnpu::sim
 
-#endif  // LEARNING_BRAIN_RESEARCH_KELVIN_SIM_RENODE_CORALNPU_RENODE_H_
+#endif  // SIM_RENODE_CORALNPU_RENODE_H_

@@ -14,8 +14,8 @@
 
 # Unit tests for CoralNPU simulator.
 
-
-
+# load("@rules_cc//cc:defs.bzl", "cc_library")
+# load("@rules_cc//cc:defs.bzl", "cc_test")
 
 exports_files(
     srcs = [
@@ -236,7 +236,7 @@ genrule(
     name = "align_test_generated_h",
     srcs = ["testfiles/align_test.disassm"],
     outs = ["align_test_generated.h"],
-    cmd = "awk -v header_guard=LEARNING_BRAIN_RESEARCH_KELVIN_SIM_TEST_ALIGN_TEST_GENERATED_H_ -v nested_namespace=align_test -f $(location testfiles/disassm_to_header.awk) $< > $@",
+    cmd = "awk -v header_guard=SIM_TEST_ALIGN_TEST_GENERATED_H_ -v nested_namespace=align_test -f $(location testfiles/disassm_to_header.awk) $< > $@",
     tools = ["testfiles/disassm_to_header.awk"],
 )
 
@@ -249,7 +249,7 @@ genrule(
     name = "frm_test_generated_h",
     srcs = ["testfiles/frm_test.disassm"],
     outs = ["frm_test_generated.h"],
-    cmd = "awk -v header_guard=LEARNING_BRAIN_RESEARCH_KELVIN_SIM_TEST_FRM_TEST_GENERATED_H_ -v nested_namespace=frm_test -f $(location testfiles/disassm_to_header.awk) $< > $@",
+    cmd = "awk -v header_guard=SIM_TEST_FRM_TEST_GENERATED_H_ -v nested_namespace=frm_test -f $(location testfiles/disassm_to_header.awk) $< > $@",
     tools = ["testfiles/disassm_to_header.awk"],
 )
 
@@ -262,13 +262,16 @@ cc_test(
     name = "coralnpu_cosim_dpi_wrapper_test",
     srcs = ["coralnpu_cosim_dpi_wrapper_test.cc"],
     copts = ["-Werror"],
+    data = ["testfiles/coralnpu_v2_rvv_add_intrinsic.elf"],
     deps = [
         ":align_test_generated",
         ":frm_test_generated",
+        "//sim:coralnpu_architecture",
         "//sim/cosim:coralnpu_cosim_lib",
+        "@com_google_googletest//:gtest_main",
         "@com_google_absl//absl/container:flat_hash_map",
         "@com_google_absl//absl/strings:str_format",
-        "@com_google_googletest//:gtest_main",
+        # INTERNAL_VERILATOR_DEPENDENCY,
     ],
 )
 
@@ -310,16 +313,50 @@ cc_library(
 )
 
 cc_test(
-    name = "coralnpu_v2_simulator_test",
-    srcs = ["coralnpu_v2_simulator_test.cc"],
+    name = "coralnpu_m3_encoding_test",
+    size = "small",
+    srcs = ["coralnpu_m3_encoding_test.cc"],
+    deps = [
+        "//sim:coralnpu_m3_isa",
+        "//sim:coralnpu_m3_user_decoder",
+        "//sim:coralnpu_v2_state",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_mpact-riscv//riscv:riscv_state",
+        "@com_google_mpact-sim//mpact/sim/generic:core",
+        "@com_google_mpact-sim//mpact/sim/util/memory",
+    ],
+)
+
+cc_test(
+    name = "coralnpu_m3_getters_test",
+    size = "small",
+    srcs = ["coralnpu_m3_getters_test.cc"],
+    deps = [
+        "//sim:coralnpu_m3_isa",
+        "//sim:coralnpu_m3_user_decoder",
+        "//sim:coralnpu_v2_state",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_mpact-riscv//riscv:riscv_state",
+        "@com_google_mpact-sim//mpact/sim/generic:core",
+        "@com_google_mpact-sim//mpact/sim/util/memory",
+    ],
+)
+
+cc_test(
+    name = "coralnpu_simulator_test",
+    srcs = ["coralnpu_simulator_test.cc"],
     copts = ["-Werror"],
     data = [
+        "testfiles/coralnpu_ebreak.elf",
         "testfiles/coralnpu_v2_rvv_add_intrinsic.elf",
     ],
     deps = [
         ":coralnpu_v2_rvv_add_intrinsic_generated",
-        "//sim:coralnpu_v2_simulator",
+        "//sim:coralnpu_architecture",
+        "//sim:coralnpu_m3_user_decoder",
+        "//sim:coralnpu_simulator",
         "//sim:coralnpu_v2_state",
+        "//sim:coralnpu_v2_user_decoder",
         "@com_google_absl//absl/status",
         "@com_google_absl//absl/status:status_matchers",
         "@com_google_absl//absl/status:statusor",

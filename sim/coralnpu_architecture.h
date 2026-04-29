@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,18 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sim/coralnpu_v2_encoding.h"
+#ifndef SIM_CORALNPU_ARCHITECTURE_H_
+#define SIM_CORALNPU_ARCHITECTURE_H_
 
-#include <cstdint>
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#include "sim/coralnpu_v2_bin_decoder.h"
-#include "sim/coralnpu_v2_encoding_template.h"
+typedef enum {
+  kCoralNPUV2 = 0,
+  kCoralNPUM3 = 1,
+} coralnpu_architecture_t;
+
+#ifdef __cplusplus
+}  // extern "C"
 
 namespace coralnpu::sim {
-
-void CoralNPUV2Encoding::ParseInstruction(uint32_t inst_word) {
-  CoralNPUV2EncodingTemplate::ParseInstruction(
-      inst_word, ::coralnpu::sim::encoding::DecodeCoralNPUV2Inst32);
-}
-
+enum class Architecture {
+  kV2 = kCoralNPUV2,
+  kM3 = kCoralNPUM3,
+};
 }  // namespace coralnpu::sim
+#endif
+
+#endif  // SIM_CORALNPU_ARCHITECTURE_H_

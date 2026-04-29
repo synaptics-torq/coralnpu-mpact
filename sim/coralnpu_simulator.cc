@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "sim/coralnpu_v2_simulator.h"
+#include "sim/coralnpu_simulator.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -20,8 +20,9 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <vector>
 
+#include "sim/coralnpu_architecture.h"
+#include "sim/coralnpu_m3_user_decoder.h"
 #include "sim/coralnpu_v2_state.h"
 #include "sim/coralnpu_v2_user_decoder.h"
 #include "absl/log/check.h"
@@ -47,6 +48,7 @@
 namespace coralnpu::sim {
 
 using ::mpact::sim::generic::Instruction;
+using ::mpact::sim::generic::operator*;  // NOLINT: clang-tidy false positive.
 using ::mpact::sim::riscv::kFRegisterAliases;
 using ::mpact::sim::riscv::kXRegisterAliases;
 using ::mpact::sim::riscv::RiscV32HtifSemiHost;
@@ -60,39 +62,35 @@ using ::mpact::sim::riscv::RVVectorRegister;
 using ::mpact::sim::util::ElfProgramLoader;
 using ::mpact::sim::util::FlatDemandMemory;
 using ::mpact::sim::util::MemoryWatcher;
-using ::mpact::sim::generic::operator*;  // NOLINT: clang-tidy false positive.
 
-namespace {
-// Helper function to get the magic semihosting addresses from the loader.
-bool GetMagicAddresses(ElfProgramLoader* loader,
-                       RiscV32HtifSemiHost::SemiHostAddresses* magic) {
+std::optional<mpact::sim::riscv::RiscV32HtifSemiHost::SemiHostAddresses>
+CoralNPUSimulator::GetHtifMagicAddresses(
+    mpact::sim::util::ElfProgramLoader* loader) {
+  RiscV32HtifSemiHost::SemiHostAddresses magic;
   auto result = loader->GetSymbol("tohost_ready");
-  if (!result.ok()) return false;
-  magic->tohost_ready = result.value().first;
+  if (!result.ok()) return std::nullopt;
+  magic.tohost_ready = result->first;
 
   result = loader->GetSymbol("tohost");
-  if (!result.ok()) return false;
-  magic->tohost = result.value().first;
+  if (!result.ok()) return std::nullopt;
+  magic.tohost = result->first;
 
   result = loader->GetSymbol("fromhost_ready");
-  if (!result.ok()) return false;
-  magic->fromhost_ready = result.value().first;
+  if (!result.ok()) return std::nullopt;
+  magic.fromhost_ready = result->first;
 
   result = loader->GetSymbol("fromhost");
-  if (!result.ok()) return false;
-  magic->fromhost = result.value().first;
+  if (!result.ok()) return std::nullopt;
+  magic.fromhost = result->first;
 
   LOG(INFO) << absl::StrFormat(
       "HTIF magic addresses: tohost=0x%08x, tohost_ready=0x%08x, "
       "fromhost=0x%08x, fromhost_ready=0x%08x",
-      magic->tohost, magic->tohost_ready, magic->fromhost,
-      magic->fromhost_ready);
-  return true;
+      magic.tohost, magic.tohost_ready, magic.fromhost, magic.fromhost_ready);
+  return magic;
 }
-}  // namespace
 
-CoralNPUV2Simulator::CoralNPUV2Simulator(
-    const CoralNPUV2SimulatorOptions& options)
+CoralNPUSimulator::CoralNPUSimulator(const CoralNPUSimulatorOptions& options)
     : options_(options) {
   // Create the memory interface and the state.
   memory_ = std::make_unique<FlatDemandMemory>();
@@ -101,8 +99,10 @@ CoralNPUV2Simulator::CoralNPUV2Simulator(
       .initial_misa_value = options_.initial_misa_value,
       .memory_regions = options_.memory_regions,
   };
+  std::string id = (options_.architecture == Architecture::kM3) ? "CoralNPUM3"
+                                                                : "CoralNPUV2";
   state_ =
-      CreateCoralNPUV2State("CoralNPUV2", mpact::sim::riscv::RiscVXlen::RV32,
+      CreateCoralNPUV2State(id, mpact::sim::riscv::RiscVXlen::RV32,
                             memory_.get(), /*atomic_memory=*/nullptr, &config);
 
   // Add the scalar, floating point and vector registers to the state.
@@ -130,40 +130,47 @@ CoralNPUV2Simulator::CoralNPUV2Simulator(
   rvv_state_ = std::make_unique<RiscVVectorState>(state_.get(),
                                                   kCoralNPUV2VectorByteLength);
 
-  decoder_ =
-      std::make_unique<CoralNPUV2UserDecoder>(state_.get(), memory_.get());
+  if (options_.architecture == Architecture::kM3) {
+    decoder_ =
+        std::make_unique<CoralNPUM3UserDecoder>(state_.get(), memory_.get());
+  } else {
+    decoder_ =
+        std::make_unique<CoralNPUV2UserDecoder>(state_.get(), memory_.get());
+  }
 
   // Create the top level instance of the simulation engine.
-  top_ = std::make_unique<RiscVTop>("CoralNPUV2", state_.get(), decoder_.get());
+  top_ = std::make_unique<RiscVTop>(id, state_.get(), decoder_.get());
 
-  // Add a handler to halt the simulation when an mpause instruction is
-  // received.
-  state_->AddMpauseHandler([this](const Instruction* inst) {
-    std::cout << "mpause instruction received.\n";
-    top_->RequestHalt(HaltReason::kUserRequest, inst);
-    return true;
-  });
-
-  // Add a handler to halt the simulation when an ebreak instruction is
-  // received.
-  state_->AddEbreakHandler([this](const Instruction* inst) {
-    std::cout << "ebreak instruction received. Instruction address: "
-              << absl::StrFormat("0x%08x", inst->address()) << std::endl;
-    if (options_.exit_on_ebreak) {
+  if (!options_.skip_default_handlers) {
+    // Add a handler to halt the simulation when an mpause instruction is
+    // received.
+    state_->AddMpauseHandler([this](const Instruction* inst) {
+      std::cout << "mpause instruction received.\n";
       top_->RequestHalt(HaltReason::kUserRequest, inst);
       return true;
-    }
-    return false;
-  });
+    });
+
+    // Add a handler to halt the simulation when an ebreak instruction is
+    // received.
+    state_->AddEbreakHandler([this](const Instruction* inst) {
+      std::cout << "ebreak instruction received. Instruction address: "
+                << absl::StrFormat("0x%08x", inst->address()) << "\n";
+      if (options_.exit_on_ebreak) {
+        top_->RequestHalt(HaltReason::kUserRequest, inst);
+        return true;
+      }
+      return false;
+    });
+  }
 
   elf_loader_ = std::make_unique<ElfProgramLoader>(memory_.get());
 
   memory_watcher_ = std::make_unique<MemoryWatcher>(memory_.get());
 }
 
-CoralNPUV2Simulator::~CoralNPUV2Simulator() = default;
+CoralNPUSimulator::~CoralNPUSimulator() = default;
 
-absl::Status CoralNPUV2Simulator::LoadProgram(
+absl::Status CoralNPUSimulator::LoadProgram(
     const std::string& file_name, std::optional<uint32_t> entry_point) {
   auto load_result = elf_loader_->LoadProgram(file_name);
   if (!load_result.ok()) {
@@ -209,10 +216,9 @@ absl::Status CoralNPUV2Simulator::LoadProgram(
     }
 
     // Add htif semihosting.
-    RiscV32HtifSemiHost::SemiHostAddresses magic_addresses;
-    if (GetMagicAddresses(elf_loader_.get(), &magic_addresses)) {
+    if (auto magic_addresses = GetHtifMagicAddresses(elf_loader_.get())) {
       htif_semihost_ = std::make_unique<RiscV32HtifSemiHost>(
-          memory_watcher_.get(), memory_.get(), magic_addresses,
+          memory_watcher_.get(), memory_.get(), *magic_addresses,
           [this]() {
             LOG(INFO) << "HTIF semihosting halt request received";
             top_->RequestHalt(RiscVTop::HaltReason::kSemihostHaltRequest,
@@ -233,58 +239,57 @@ absl::Status CoralNPUV2Simulator::LoadProgram(
   return top_->WriteRegister("pc", final_entry_point);
 }
 
-absl::Status CoralNPUV2Simulator::Run() { return top_->Run(); }
+absl::Status CoralNPUSimulator::Run() { return top_->Run(); }
 
-absl::StatusOr<int> CoralNPUV2Simulator::Step(int num_steps) {
+absl::StatusOr<int> CoralNPUSimulator::Step(int num_steps) {
   return top_->Step(num_steps);
 }
 
-absl::StatusOr<uint64_t> CoralNPUV2Simulator::ReadRegister(
+absl::StatusOr<uint64_t> CoralNPUSimulator::ReadRegister(
     const std::string& name) {
   return top_->ReadRegister(name);
 }
 
-absl::Status CoralNPUV2Simulator::WriteRegister(const std::string& name,
-                                                uint64_t value) {
+absl::Status CoralNPUSimulator::WriteRegister(const std::string& name,
+                                              uint64_t value) {
   return top_->WriteRegister(name, value);
 }
 
 absl::StatusOr<mpact::sim::generic::DataBuffer*>
-CoralNPUV2Simulator::GetRegisterDataBuffer(const std::string& name) {
+CoralNPUSimulator::GetRegisterDataBuffer(const std::string& name) {
   return top_->GetRegisterDataBuffer(name);
 }
 
-absl::StatusOr<size_t> CoralNPUV2Simulator::ReadMemory(uint64_t address,
-                                                       void* buf,
-                                                       size_t length) {
+absl::StatusOr<size_t> CoralNPUSimulator::ReadMemory(uint64_t address,
+                                                     void* buf, size_t length) {
   return top_->ReadMemory(address, buf, length);
 }
 
-absl::StatusOr<size_t> CoralNPUV2Simulator::WriteMemory(uint64_t address,
-                                                        const void* buf,
-                                                        size_t length) {
+absl::StatusOr<size_t> CoralNPUSimulator::WriteMemory(uint64_t address,
+                                                      const void* buf,
+                                                      size_t length) {
   return top_->WriteMemory(address, buf, length);
 }
 
-void CoralNPUV2Simulator::RunInteractive() {
+void CoralNPUSimulator::RunInteractive() {
   mpact::sim::riscv::DebugCommandShell cmd_shell;
   cmd_shell.AddCore({top_.get(), [this]() { return elf_loader_.get(); }});
   cmd_shell.Run(std::cin, std::cout);
 }
 
-absl::Status CoralNPUV2Simulator::Wait() { return top_->Wait(); }
+absl::Status CoralNPUSimulator::Wait() { return top_->Wait(); }
 
-absl::Status CoralNPUV2Simulator::Halt() { return top_->Halt(); }
+absl::Status CoralNPUSimulator::Halt() { return top_->Halt(); }
 
-uint64_t CoralNPUV2Simulator::GetCycleCount() const {
+uint64_t CoralNPUSimulator::GetCycleCount() const {
   return top_->counter_num_cycles()->GetValue();
 }
 
-absl::Status CoralNPUV2Simulator::SetSwBreakpoint(uint64_t address) {
+absl::Status CoralNPUSimulator::SetSwBreakpoint(uint64_t address) {
   return top_->SetSwBreakpoint(address);
 }
 
-absl::Status CoralNPUV2Simulator::ClearSwBreakpoint(uint64_t address) {
+absl::Status CoralNPUSimulator::ClearSwBreakpoint(uint64_t address) {
   return top_->ClearSwBreakpoint(address);
 }
 

@@ -25,9 +25,6 @@ isa CoralNPUV2 {
   slots { coralnpu_v2; }
 }
 
-
-//                     files.
-
 // Basic integer ALU instructions, part of the RiscV 32i subset.
 slot riscv32i {
   includes {
@@ -788,197 +785,197 @@ slot riscv_zve32x {
     // Unit stride loads, masked (vm=0)
     vle8{(: rs1, const1, vmask :), (: : vd )},
       disasm: "vle8.v", "%vd, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 1)",
                "&::mpact::sim::riscv::VlChild";
     vle16{(: rs1, const2, vmask :), (: : vd )},
       disasm: "vle16.v", "%vd, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 2)",
                "&::mpact::sim::riscv::VlChild";
     vle32{(: rs1, const4, vmask :), ( : : vd) },
       disasm: "vle32.v", "%vd, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 4)",
                "&::mpact::sim::riscv::VlChild";
 
     // Unit stride loads, unmasked (vm=1)
     vle8_vm1{(: rs1, const1, vmask_true :), (: : vd )},
       disasm: "vle8.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 1)",
                "&::mpact::sim::riscv::VlChild";
     vle16_vm1{(: rs1, const2, vmask_true :), (: : vd )},
       disasm: "vle16.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 2)",
                "&::mpact::sim::riscv::VlChild";
     vle32_vm1{(: rs1, const4, vmask_true :), ( : : vd) },
       disasm: "vle32.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 4)",
                "&::mpact::sim::riscv::VlChild";
 
     // Vector strided loads
     vlse8{(: rs1, rs2, vmask :), (: : vd)},
       disasm: "vlse8.v", "%vd, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 1)",
                "&::mpact::sim::riscv::VlChild";
     vlse16{(: rs1, rs2, vmask :), (: : vd)},
       disasm: "vlse16.v", "%vd, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 2)",
                "&::mpact::sim::riscv::VlChild";
     vlse32{(: rs1, rs2, vmask :), (: : vd)},
       disasm: "vlse32.v", "%vd, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 4)",
                "&::mpact::sim::riscv::VlChild";
 
     // Vector mask load
     vlm{(: rs1, const1, vmask_true :), (: : vd)},
       disasm: "vlm.v", "%vd, (%rs1)",
-      semfunc: "&::mpact::sim::riscv::Vlm", "&::mpact::sim::riscv::VlChild";
+      semfunc: "&::coralnpu::sim::CoralNPUV2Vlm", "&::mpact::sim::riscv::VlChild";
 
     // Unit stride vector load, fault first
     vle8ff{(: rs1, const1, vmask:), (: : vd)},
       disasm: "vle8ff.v", "%vd, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 1)",
                "&::mpact::sim::riscv::VlChild";
     vle16ff{(: rs1, const2, vmask:), (: : vd)},
       disasm: "vle16ff.v", "%vd, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 2)",
                "&::mpact::sim::riscv::VlChild";
     vle32ff{(: rs1, const4, vmask:), (: : vd)},
       disasm: "vle32ff.v", "%vd, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlStrided, /*element_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlStrided, /*element_width*/ 4)",
                "&::mpact::sim::riscv::VlChild";
 
     // Vector register load
     vl1re8{(: rs1 :), (: : vd)},
       disasm: "vl1re8.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 1, /*element_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 1, /*element_width*/ 1)",
                "&::mpact::sim::riscv::VlChild";
     vl1re16{(: rs1 :), (: : vd)},
       disasm: "vl1re16.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 1, /*element_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 1, /*element_width*/ 2)",
                "&::mpact::sim::riscv::VlChild";
     vl1re32{(: rs1 :), (: : vd)},
       disasm: "vl1re32.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 1, /*element_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 1, /*element_width*/ 4)",
                "&::mpact::sim::riscv::VlChild";
     vl2re8{(: rs1 :), (: : vd)},
       disasm: "vl2re8.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 2, /*element_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 2, /*element_width*/ 1)",
                "&::mpact::sim::riscv::VlChild";
     vl2re16{(: rs1 :), (: : vd)},
       disasm: "vl2re16.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 2, /*element_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 2, /*element_width*/ 2)",
                "&::mpact::sim::riscv::VlChild";
     vl2re32{(: rs1 :), (: : vd)},
       disasm: "vl2re32.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 2, /*element_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 2, /*element_width*/ 4)",
                "&::mpact::sim::riscv::VlChild";
     vl4re8{(: rs1 :), (: : vd)},
       disasm: "vl4re8.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 4, /*element_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 4, /*element_width*/ 1)",
                "&::mpact::sim::riscv::VlChild";
     vl4re16{(: rs1 :), (: : vd)},
       disasm: "vl4re16.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 4, /*element_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 4, /*element_width*/ 2)",
                "&::mpact::sim::riscv::VlChild";
     vl4re32{(: rs1 :), (: : vd)},
       disasm: "vl4re32.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 4, /*element_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 4, /*element_width*/ 4)",
                "&::mpact::sim::riscv::VlChild";
     vl8re8{(: rs1 :), (: : vd)},
       disasm: "vl8re8.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 8, /*element_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 8, /*element_width*/ 1)",
                "&::mpact::sim::riscv::VlChild";
     vl8re16{(: rs1 :), (: : vd)},
       disasm: "vl8re16.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 8, /*element_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 8, /*element_width*/ 2)",
                "&::mpact::sim::riscv::VlChild";
     vl8re32{(: rs1 :), (: : vd)},
       disasm: "vl8re32.v", "%vd, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlRegister, /*num_regs*/ 8, /*element_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlRegister, /*num_regs*/ 8, /*element_width*/ 4)",
                "&::mpact::sim::riscv::VlChild";
 
     // Vector load, indexed, unordered.
     vluxei8{(: rs1, vs2, vmask:), (: : vd)},
       disasm: "vluxei8.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlIndexed, /*index_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlIndexed, /*index_width*/ 1)",
                "&::mpact::sim::riscv::VlChild";
     vluxei16{(: rs1, vs2, vmask:), (: : vd)},
       disasm: "vluxei16.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlIndexed, /*index_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlIndexed, /*index_width*/ 2)",
                "&::mpact::sim::riscv::VlChild";
     vluxei32{(: rs1, vs2, vmask:), (: : vd)},
       disasm: "vluxei32.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlIndexed, /*index_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlIndexed, /*index_width*/ 4)",
                "&::mpact::sim::riscv::VlChild";
 
     // Vector load, indexed, ordered.
     vloxei8{(: rs1, vs2, vmask:), (: : vd)},
       disasm: "vloxei8.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlIndexed, /*index_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlIndexed, /*index_width*/ 1)",
                "&::mpact::sim::riscv::VlChild";
     vloxei16{(: rs1, vs2, vmask:), (: : vd)},
       disasm: "vloxei16.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlIndexed, /*index_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlIndexed, /*index_width*/ 2)",
                "&::mpact::sim::riscv::VlChild";
     vloxei32{(: rs1, vs2, vmask:), (: : vd)},
       disasm: "vloxei32.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlIndexed, /*index_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlIndexed, /*index_width*/ 4)",
                "&::mpact::sim::riscv::VlChild";
 
     // Vector unit-stride segment load
     vlsege8{(: rs1, vmask, nf:), (: nf : vd)},
       disasm: "vlseg%nf\\e.v", "%vd, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegment, /*element_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegment, /*element_width*/ 1)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 1)";
     vlsege16{(: rs1, vmask, nf:), (: nf : vd)},
       disasm: "vlseg%nf\\e.v", "%vd, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegment, /*element_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegment, /*element_width*/ 2)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 2)";
     vlsege32{(: rs1, vmask, nf:), (: nf : vd)},
       disasm: "vlseg%nf\\e.v", "%vd, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegment, /*element_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegment, /*element_width*/ 4)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 4)";
 
     // Vector strided segment load.
     vlssege8{(: rs1, rs2, vmask, nf: ), (: nf : vd)},
       disasm: "vlsseg%nf\\e8.v", "%vd, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegmentStrided, /*element_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegmentStrided, /*element_width*/ 1)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 1)";
-    vlssege16{(: rs1, rs2, vmask, nf: ), (: nf : vd)},/*element_width*/ 
+    vlssege16{(: rs1, rs2, vmask, nf: ), (: nf : vd)},
       disasm: "vlsseg%nf\\e16.v", "%vd, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegmentStrided, /*element_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegmentStrided, /*element_width*/ 2)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 2)";
     vlssege32{(: rs1, rs2, vmask, nf: ), (: nf : vd)},
       disasm: "vlsseg%nf\\e32.v", "%vd, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegmentStrided, /*element_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegmentStrided, /*element_width*/ 4)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 4)";
 
     // Vector indexed segment load unordered.
     vluxsegei8{(: rs1, vs2, vmask, nf :), (: nf : vd)},
       disasm: "vluxseg%nf\\ei1.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegmentIndexed, /*index_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegmentIndexed, /*index_width*/ 1)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 1)";
     vluxsegei16{(: rs1, vs2, vmask, nf :), (: nf : vd)},
       disasm: "vluxseg%nf\\ei2.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegmentIndexed, /*index_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegmentIndexed, /*index_width*/ 2)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 2)";
     vluxsegei32{(: rs1, vs2, vmask, nf :), (: nf : vd)},
       disasm: "vluxseg%nf\\ei4.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegmentIndexed, /*index_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegmentIndexed, /*index_width*/ 4)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 4)";
 
     // Vector indexed segment load ordered.
 
     vloxsegei8{(: rs1, vs2, vmask, nf :), (: nf : vd)},
       disasm: "vluxseg%nf\\ei1.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegmentIndexed, /*index_width*/ 1)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegmentIndexed, /*index_width*/ 1)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 1)";
     vloxsegei16{(: rs1, vs2, vmask, nf :), (: nf : vd)},
       disasm: "vluxseg%nf\\ei2.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegmentIndexed, /*index_width*/ 2)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegmentIndexed, /*index_width*/ 2)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 2)";
     vloxsegei32{(: rs1, vs2, vmask, nf :), (: nf : vd)},
       disasm: "vluxseg%nf\\ei4.v", "%vd, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VlSegmentIndexed, /*index_width*/ 4)",
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VlSegmentIndexed, /*index_width*/ 4)",
                "absl::bind_front(&::mpact::sim::riscv::VlSegmentChild, /*element_width*/ 4)";
 
     // VECTOR STORES
@@ -986,144 +983,144 @@ slot riscv_zve32x {
     // Vector store, unit stride.
     vse8{: vs3, rs1, const1, vmask : },
       disasm: "vse8.v", "%vs3, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsStrided, /*element_width*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsStrided, /*element_width*/ 1)";
     vse16{: vs3, rs1, const2, vmask : },
       disasm: "vse16.v", "%vs3, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsStrided, /*element_width*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsStrided, /*element_width*/ 2)";
     vse32{: vs3, rs1, const4, vmask : },
       disasm: "vse32.v", "%vs3, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsStrided, /*element_width*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsStrided, /*element_width*/ 4)";
 
     // Vector store mask
     vsm{: vs3, rs1, const1, vmask_true:},
       disasm: "vsm",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::Vsm)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2Vsm)";
 
     // Vector store, unit stride, fault first.
     vse8ff{: vs3, rs1, const1, vmask:},
       disasm: "vse8ff.v", "%vs3, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsStrided, /*element_width*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsStrided, /*element_width*/ 1)";
     vse16ff{: vs3, rs1, const2, vmask:},
       disasm: "vse16ff.v", "%vs3, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsStrided, /*element_width*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsStrided, /*element_width*/ 2)";
     vse32ff{: vs3, rs1, const4, vmask:},
       disasm: "vse32ff.v", "%vs3, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsStrided, /*element_width*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsStrided, /*element_width*/ 4)";
 
     // Vector store register.
     vs1re8{(: vs3, rs1 :)},
       disasm: "vs1re8.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/ 1)";
     vs1re16{(: vs3, rs1 :)},
       disasm: "vs1re16.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/ 1)";
     vs1re32{(: vs3, rs1 :)},
       disasm: "vs1re32.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/ 1)";
     vs2re8{(: vs3, rs1 :)},
       disasm: "vs2re8.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/ 2)";
     vs2re16{(: vs3, rs1 :)},
       disasm: "vs2re16.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/ 2)";
     vs2re32{(: vs3, rs1 :)},
       disasm: "vs2re32.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/ 2)";
     vs4re8{(: vs3, rs1 :)},
       disasm: "vs4re8.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/ 4)";
     vs4re16{(: vs3, rs1 :)},
       disasm: "vs4re16.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/ 4)";
     vs4re32{(: vs3, rs1 :)},
       disasm: "vs4re32.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/ 4)";
     vs8re8{(: vs3, rs1 :)},
       disasm: "vs8re8.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/8)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/8)";
     vs8re16{(: vs3, rs1 :)},
       disasm: "vs8re16.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/8)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/8)";
     vs8re32{(: vs3, rs1 :)},
       disasm: "vs8re32.v", "%vs3, (%rs1)",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsRegister, /*num_regs*/8)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsRegister, /*num_regs*/8)";
 
     // Vector store, strided.
     vsse8{: vs3, rs1, rs2, vmask : },
       disasm: "vsse8.v", "%vs3, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsStrided, /*element_width*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsStrided, /*element_width*/ 1)";
     vsse16{: vs3, rs1, rs2, vmask : },
       disasm: "vsse16.v", "%vs3, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsStrided, /*element_width*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsStrided, /*element_width*/ 2)";
     vsse32{: vs3, rs1, rs2, vmask : },
       disasm: "vsse32.v", "%vs3, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsStrided, /*element_width*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsStrided, /*element_width*/ 4)";
 
     // Vector store, indexed, unordered.
     vsuxei8{: vs3, rs1, vs2, vmask: },
       disasm: "vsuxei8", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsIndexed, /*index_width*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsIndexed, /*index_width*/ 1)";
     vsuxei16{: vs3, rs1, vs2, vmask:},
       disasm: "vsuxei16", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsIndexed, /*index_width*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsIndexed, /*index_width*/ 2)";
     vsuxei32{: vs3, rs1, vs2, vmask:},
       disasm: "vsuxei32", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsIndexed, /*index_width*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsIndexed, /*index_width*/ 4)";
 
     // Vector store, indexed, unordered
     vsoxei8{: vs3, rs1, vs2, vmask:},
       disasm: "vsoxei8", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsIndexed, /*index_width*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsIndexed, /*index_width*/ 1)";
     vsoxei16{: vs3, rs1, vs2, vmask:},
       disasm: "vsoxei16", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsIndexed, /*index_width*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsIndexed, /*index_width*/ 2)";
     vsoxei32{: vs3, rs1, vs2, vmask:},
       disasm: "vsoxei32", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsIndexed, /*index_width*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsIndexed, /*index_width*/ 4)";
 
     // Vector unit-stride segment store.
     vssege8{(: vs3, rs1, vmask, nf:)},
       disasm: "vsseg%nf\\e.v", "%vs3, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegment, /*element_width*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegment, /*element_width*/ 1)";
     vssege16{(: vs3, rs1, vmask, nf:)},
       disasm: "vsseg%nf\\e.v", "%vs3, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegment, /*element_width*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegment, /*element_width*/ 2)";
     vssege32{(: vs3, rs1, vmask, nf:)},
       disasm: "vsseg%nf\\e.v", "%vs3, (%rs1), %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegment, /*element_width*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegment, /*element_width*/ 4)";
 
     // Vector strided segment store.
     vsssege8{(: vs3, rs1, rs2, vmask, nf: )},
       disasm: "vssseg%nf\\e8.v", "%vs3, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegmentStrided, /*element_width*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegmentStrided, /*element_width*/ 1)";
     vsssege16{(: vs3, rs1, rs2, vmask, nf: )},
       disasm: "vssseg%nf\\e16.v", "%vs3, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegmentStrided, /*element_width*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegmentStrided, /*element_width*/ 2)";
     vsssege32{(: vs3, rs1, rs2, vmask, nf: )},
       disasm: "vssseg%nf\\e32.v", "%vs3, (%rs1), %rs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegmentStrided, /*element_width*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegmentStrided, /*element_width*/ 4)";
 
     // Vector indexed segment store unordered.
     vsuxsegei8{(: vs3, rs1, vs2, vmask, nf :)},
       disasm: "vsuxseg%nf\\ei1.v", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegmentStrided, /*element_width*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegmentIndexed, /*index_width*/ 1)";
     vsuxsegei16{(: vs3, rs1, vs2, vmask, nf :)},
       disasm: "vsuxseg%nf\\ei2.v", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegmentStrided, /*element_width*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegmentIndexed, /*index_width*/ 2)";
     vsuxsegei32{(: vs3, rs1, vs2, vmask, nf :)},
       disasm: "vsuxseg%nf\\ei4.v", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegmentStrided, /*element_width*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegmentIndexed, /*index_width*/ 4)";
 
     // Vector indexed segment store ordered.
     vsoxsegei8{(: vs3, rs1, vs2, vmask, nf :)},
       disasm: "vsuxseg%nf\\ei1.v", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegmentIndexed, /*index_width*/ 1)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegmentIndexed, /*index_width*/ 1)";
     vsoxsegei16{(: vs3, rs1, vs2, vmask, nf :)},
       disasm: "vsuxseg%nf\\ei2.v", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegmentIndexed, /*index_width*/ 2)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegmentIndexed, /*index_width*/ 2)";
     vsoxsegei32{(: vs3, rs1, vs2, vmask, nf :)},
       disasm: "vsuxseg%nf\\ei4.v", "%vs3, (%rs1), %vs2, %vmask",
-      semfunc: "absl::bind_front(&::mpact::sim::riscv::VsSegmentIndexed, /*index_width*/ 4)";
+      semfunc: "absl::bind_front(&::coralnpu::sim::CoralNPUV2VsSegmentIndexed, /*index_width*/ 4)";
 
     // Integer OPIVV, OPIVX, OPIVI.
     vadd_vv{: vs2, vs1, vmask : vd},

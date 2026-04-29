@@ -15,196 +15,100 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
+#include "sim/coralnpu_architecture.h"
+#include "sim/coralnpu_simulator.h"
 #include "sim/coralnpu_v2_state.h"
-#include "sim/coralnpu_v2_user_decoder.h"
-#include "absl/base/nullability.h"
+#include "sim/cosim/coralnpu_cosim_dpi.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
-#include "absl/strings/str_cat.h"
 #include "absl/types/span.h"
-#include "riscv/riscv_fp_state.h"
-#include "riscv/riscv_register.h"
-#include "riscv/riscv_register_aliases.h"
-#include "riscv/riscv_state.h"
-#include "riscv/riscv_top.h"
-#include "riscv/riscv_vector_state.h"
-#include "mpact/sim/generic/core_debug_interface.h"
 #include "mpact/sim/generic/data_buffer.h"
-#include "mpact/sim/generic/decoder_interface.h"
-#include "mpact/sim/generic/instruction.h"
-#include "mpact/sim/generic/type_helpers.h"
-#include "mpact/sim/util/memory/flat_demand_memory.h"
-#include "mpact/sim/util/memory/memory_interface.h"
-#include "mpact/sim/util/program_loader/elf_program_loader.h"
 #include "external/svdpi_h_file/file/svdpi.h"
 
-// Include the DPI-C contract header.
-#include "sim/cosim/coralnpu_cosim_dpi.h"
+using ::coralnpu::sim::Architecture;
+using ::coralnpu::sim::CoralNPUSimulator;
+using ::coralnpu::sim::CoralNPUSimulatorOptions;
+using ::coralnpu::sim::CoralNPUV2State;
 
 namespace {
-using ::coralnpu::sim::CoralNPUV2State;
-using ::coralnpu::sim::CoralNPUV2StateConfig;
-using ::coralnpu::sim::CoralNPUV2UserDecoder;
-using ::coralnpu::sim::kCoralNPUV2VectorByteLength;
-using ::coralnpu::sim::MemoryPermission;
-using ::mpact::sim::generic::DecoderInterface;
-using ::mpact::sim::generic::Instruction;
-using ::mpact::sim::generic::operator*;  // NOLINT: clang-tidy false positive.
-using ::mpact::sim::riscv::kFRegisterAliases;
-using ::mpact::sim::riscv::kXRegisterAliases;
-using ::mpact::sim::riscv::RiscVFPState;
-using ::mpact::sim::riscv::RiscVState;
-using ::mpact::sim::riscv::RiscVTop;
-using ::mpact::sim::riscv::RiscVVectorState;
-using ::mpact::sim::riscv::RiscVXlen;
-using ::mpact::sim::riscv::RV32Register;
-using ::mpact::sim::riscv::RVFpRegister;
-using ::mpact::sim::riscv::RVVectorRegister;
-using ::mpact::sim::util::ElfProgramLoader;
-using ::mpact::sim::util::FlatDemandMemory;
-using ::mpact::sim::util::MemoryInterface;
-
-using HaltReason = ::mpact::sim::generic::CoreDebugInterface::HaltReason;
 
 class MpactHandle {
  public:
-  MpactHandle()
-      : memory_(std::make_unique<FlatDemandMemory>()),
-        elf_loader_(std::make_unique<ElfProgramLoader>(memory_.get())) {}
+  MpactHandle() = default;
 
-  void Init(sim_config_t* /*absl_nullable*/ cosim_config) {
-    CHECK(!is_initialized_) << "[DPI] Init: is_initialized_ is already true.";
-    auto state_config = std::make_unique<CoralNPUV2StateConfig>();
-    uint32_t pc_value = ::coralnpu::sim::kCoralNPUV2DefaultItcmStartAddress;
+  bool Init(const sim_config_t* cosim_config) {
+    if (is_initialized_) {
+      LOG(ERROR) << "[DPI] Init: is_initialized_ is already true.";
+      return false;
+    }
     if (cosim_config != nullptr) {
-      state_config->initial_misa_value = cosim_config->initial_misa_value;
-      state_config->memory_regions = {
+      options_.architecture =
+          static_cast<Architecture>(cosim_config->architecture);
+      options_.itcm_start_address = cosim_config->itcm_start_address;
+      options_.memory_regions.push_back(
           {.start_address = cosim_config->itcm_start_address,
            .length = cosim_config->itcm_length,
-           .permissions = MemoryPermission::kReadExecute},
-          {.start_address = ::coralnpu::sim::kCoralNPUV2DefaultDtcmStartAddress,
-           .length = ::coralnpu::sim::kCoralNPUV2DefaultDtcmLength,
-           .permissions = MemoryPermission::kReadWrite},
-          {.start_address =
-               ::coralnpu::sim::kCoralNPUV2DefaultExtmemStartAddress,
-           .length = ::coralnpu::sim::kCoralNPUV2DefaultExtmemLength,
-           .permissions = MemoryPermission::kReadWrite}};
-      pc_value = cosim_config->itcm_start_address;
+           .permissions =
+               ::coralnpu::sim::MemoryPermission::kReadWriteExecute});
+      options_.initial_misa_value = cosim_config->initial_misa_value;
     }
-    state_ =
-        CreateCoralNPUV2State("CoralNPUV2", RiscVXlen::RV32, memory_.get(),
-                              /*atomic_memory=*/nullptr, state_config.get());
-    // Make sure the architectural and abi register aliases are added.
-    std::string reg_name;
-    for (int i = 0; i < 32; i++) {
-      reg_name = absl::StrCat(RiscVState::kXregPrefix, i);
-      [[maybe_unused]] RV32Register* xreg =
-          state_->AddRegister<RV32Register>(reg_name);
-      CHECK_OK(state_->AddRegisterAlias<RV32Register>(reg_name,
-                                                      kXRegisterAliases[i]));
-
-      reg_name = absl::StrCat(RiscVState::kFregPrefix, i);
-      [[maybe_unused]] RVFpRegister* freg =
-          state_->AddRegister<RVFpRegister>(reg_name);
-      CHECK_OK(state_->AddRegisterAlias<RVFpRegister>(reg_name,
-                                                      kFRegisterAliases[i]));
-
-      reg_name = absl::StrCat(RiscVState::kVregPrefix, i);
-      [[maybe_unused]] RVVectorRegister* vreg =
-          state_->AddRegister<RVVectorRegister>(reg_name,
-                                                kCoralNPUV2VectorByteLength);
+    simulator_ = std::make_unique<CoralNPUSimulator>(options_);
+    auto status = simulator_->WriteRegister("pc", options_.itcm_start_address);
+    if (!status.ok()) {
+      LOG(ERROR) << "[DPI] Init: Failed to set initial PC: "
+                 << status.message();
+      return false;
     }
-    rv_fp_state_ = CreateFPState(state_.get());
-    state_->set_rv_fp(rv_fp_state_.get());
-    rvv_state_ = CreateVectorState(state_.get());
-    rv_decoder_ = CreateDecoder(state_.get(), memory_.get());
-    rv_top_ = CreateRiscVTop(state_.get(), rv_decoder_.get());
-
-    state_->AddMpauseHandler([this](const Instruction* inst) -> bool {
-      LOG(INFO) << "Halting cosimulation due to mpause instruction.";
-      cosimulation_halted_ = true;
-      state_->Cease(inst);
-      return true;
-    });
-    absl::Status pc_write = rv_top_->WriteRegister("pc", pc_value);
-    CHECK_OK(pc_write) << "Error writing to pc.";
     is_initialized_ = true;
+    return true;
   }
 
-  absl::Status load_program(const std::string& elf_file) {
-    auto load_result = elf_loader_->LoadProgram(elf_file);
-    if (!load_result.ok()) {
-      return absl::InternalError(
-          absl::StrCat("Failed to load program '", elf_file,
-                       "': ", load_result.status().message()));
+  absl::Status LoadProgram(const std::string& elf_file) {
+    if (!is_initialized_) {
+      return absl::FailedPreconditionError(
+          "[DPI] LoadProgram: Simulator not initialized.");
     }
-    uint64_t entry_point = *load_result;
-    absl::Status pc_write = rv_top_->WriteRegister("pc", entry_point);
-    if (!pc_write.ok()) {
-      return absl::InternalError(
-          absl::StrCat("Failed to write pc: ", pc_write.message()));
-    }
-    return absl::OkStatus();
+    return simulator_->LoadProgram(elf_file);
   }
 
-  uint32_t get_pc() {
-    absl::StatusOr<uint64_t> read_reg_status = rv_top_->ReadRegister("pc");
-    CHECK_OK(read_reg_status);
-    return static_cast<uint32_t>(read_reg_status.value());
-  }
-
-  RiscVTop* rv_top() const { return rv_top_.get(); }
-
-  CoralNPUV2State* state() const { return state_.get(); }
-
-  ElfProgramLoader* elf_loader() const { return elf_loader_.get(); }
-
-  bool cosimulation_halted() const { return cosimulation_halted_; }
+  CoralNPUV2State* state() const { return simulator_->state(); }
+  CoralNPUSimulator* simulator() const { return simulator_.get(); }
 
   bool is_initialized() const { return is_initialized_; }
 
+  coralnpu_architecture_t architecture() const {
+    switch (options_.architecture) {
+      case Architecture::kM3:
+        return kCoralNPUM3;
+      case Architecture::kV2:
+      default:
+        return kCoralNPUV2;
+    }
+  }
+
+  uint32_t get_pc() {
+    auto read_reg_status = simulator_->ReadRegister("pc");
+    if (!read_reg_status.ok()) {
+      LOG(ERROR) << "[DPI] get_pc: Failed to read PC: "
+                 << read_reg_status.status().message();
+      return 0;
+    }
+    return static_cast<uint32_t>(read_reg_status.value());
+  }
+
  private:
-  std::unique_ptr<RiscVFPState> CreateFPState(CoralNPUV2State* state) {
-    return std::make_unique<RiscVFPState>(state->csr_set(), state);
-  }
-
-  std::unique_ptr<RiscVVectorState> CreateVectorState(CoralNPUV2State* state) {
-    return std::make_unique<RiscVVectorState>(state,
-                                              kCoralNPUV2VectorByteLength);
-  }
-
-  std::unique_ptr<DecoderInterface> CreateDecoder(CoralNPUV2State* state,
-                                                  MemoryInterface* memory) {
-    return std::make_unique<CoralNPUV2UserDecoder>(state, memory);
-  }
-
-  std::unique_ptr<RiscVTop> CreateRiscVTop(CoralNPUV2State* state,
-                                           DecoderInterface* decoder) {
-    return std::make_unique<RiscVTop>("CoralNPUPlaceholder", state, decoder);
-  }
-
-  const std::unique_ptr<MemoryInterface> memory_;
-  const std::unique_ptr<ElfProgramLoader> elf_loader_;
-  std::unique_ptr<CoralNPUV2State> state_;
-  std::unique_ptr<RiscVFPState> rv_fp_state_;
-  std::unique_ptr<RiscVVectorState> rvv_state_;
-  std::unique_ptr<DecoderInterface> rv_decoder_;
-  std::unique_ptr<RiscVTop> rv_top_;
-
-  // Flag to indicate if the simulation has halted due to an mpause
-  // instruction. We add halting logic in the cosim library because single
-  // stepping the rv_top object clears the halted flags.
-  bool cosimulation_halted_ = false;
-
-  // Flag to indicate if the simulation has been initialized. This is used to
-  // support lazy initialization for the case that mpact_config is not called.
+  CoralNPUSimulatorOptions options_;
+  std::unique_ptr<CoralNPUSimulator> simulator_;
   bool is_initialized_ = false;
 };
 
 MpactHandle* g_mpact_handle = nullptr;
 }  // namespace
+
+extern "C" {
 
 int mpact_init() {
   if (g_mpact_handle != nullptr) {
@@ -216,16 +120,18 @@ int mpact_init() {
   return 0;
 }
 
-int mpact_config(sim_config_t* config_data) {
+int mpact_config(const sim_config_t* config) {
   if (g_mpact_handle == nullptr) {
     LOG(ERROR) << "[DPI] mpact_config: g_mpact_handle is null.";
     return -1;
   }
-  if (config_data == nullptr) {
-    LOG(ERROR) << "[DPI] mpact_config: config_data is null.";
-    return -2;
+  if (g_mpact_handle->is_initialized()) {
+    LOG(ERROR) << "[DPI] mpact_config: g_mpact_handle is already initialized.";
+    return -1;
   }
-  g_mpact_handle->Init(config_data);
+  if (!g_mpact_handle->Init(config)) {
+    return -1;
+  }
   return 0;
 }
 
@@ -239,8 +145,8 @@ int mpact_add_load_store_range(uint32_t start_address, uint32_t length) {
                  << "run before mpact_add_load_store_range.";
     return -2;
   }
-  g_mpact_handle->state()->AddMemoryRegion(start_address, length,
-                                           MemoryPermission::kReadWrite);
+  g_mpact_handle->state()->AddMemoryRegion(
+      start_address, length, ::coralnpu::sim::MemoryPermission::kReadWrite);
   return 0;
 }
 
@@ -258,10 +164,10 @@ int mpact_load_program(const char* elf_file) {
     LOG(ERROR) << "[DPI] mpact_init: received a null elf program.";
     return -1;
   }
-  absl::Status status = g_mpact_handle->load_program(elf_file);
+  auto status = g_mpact_handle->LoadProgram(elf_file);
   if (!status.ok()) {
-    LOG(ERROR) << "[DPI] Failed to load elf program '" << elf_file
-               << "': " << status.message();
+    LOG(ERROR) << "[DPI] Failed to load program " << elf_file << ": "
+               << status.message();
     return -1;
   }
   return 0;
@@ -282,14 +188,13 @@ int mpact_step(const svLogicVecVal* instruction) {
   if (!g_mpact_handle->is_initialized()) {
     LOG(INFO) << "[DPI] mpact_step: Lazy initialization of g_mpact_handle. "
               << "Using default DTCM start address and length.";
-    g_mpact_handle->Init(nullptr);
+    if (!g_mpact_handle->Init(nullptr)) {
+      return -1;
+    }
   }
-  if (g_mpact_handle->cosimulation_halted()) {
-    LOG(ERROR) << "[DPI] mpact_step: Can not step when cosimulation is halted.";
-    return 2;
-  }
+
   uint32_t inst_word = instruction->aval;
-  if (!g_mpact_handle->rv_top()
+  if (!g_mpact_handle->simulator()
            ->WriteMemory(g_mpact_handle->get_pc(), &inst_word,
                          sizeof(inst_word))
            .ok()) {
@@ -297,9 +202,15 @@ int mpact_step(const svLogicVecVal* instruction) {
     return 1;
   }
 
-  if (!g_mpact_handle->rv_top()->Step(1).ok()) {
+  absl::StatusOr<int> step_res = g_mpact_handle->simulator()->Step(1);
+  if (!step_res.ok()) {
     LOG(ERROR) << "[DPI] mpact_step: Failed to step the simulator.";
     return 2;
+  }
+  if (step_res.value() != 1) {
+    LOG(ERROR) << "[DPI] mpact_step: Failed to step the simulator by 1 "
+                  "instruction.";
+    return 3;
   }
   return 0;
 }
@@ -334,19 +245,21 @@ int mpact_get_vector_register(const char* name, svLogicVecVal* value) {
   if (!g_mpact_handle->is_initialized()) {
     LOG(INFO) << "[DPI] mpact_get_vector_register: Lazy initialization of "
                  "g_mpact_handle.";
-    g_mpact_handle->Init(nullptr);
+    if (!g_mpact_handle->Init(nullptr)) {
+      return -1;
+    }
   }
-  std::string reg_name(name);
-  RiscVTop* rv_top = g_mpact_handle->rv_top();
+
   absl::StatusOr<::mpact::sim::generic::DataBuffer*> vector_db =
-      rv_top->GetRegisterDataBuffer(reg_name);
+      g_mpact_handle->simulator()->GetRegisterDataBuffer(name);
   if (!vector_db.ok()) {
     LOG(ERROR)
         << "[DPI] mpact_get_vector_register: Failed to get register data "
            "buffer: "
-        << reg_name;
+        << name;
     return -4;
   }
+
   absl::Span<uint32_t> vector_data = (*vector_db)->Get<uint32_t>();
   for (int i = 0; i < vector_data.size(); ++i) {
     value[i].aval = vector_data[i];
@@ -372,14 +285,19 @@ int mpact_get_register(const char* name, uint32_t* value) {
   if (!g_mpact_handle->is_initialized()) {
     LOG(INFO) << "[DPI] mpact_get_register: Lazy initialization of "
                  "g_mpact_handle.";
-    g_mpact_handle->Init(nullptr);
+    if (!g_mpact_handle->Init(nullptr)) {
+      return -1;
+    }
   }
-  std::string reg_name(name);
-  RiscVTop* rv_top = g_mpact_handle->rv_top();
-  absl::StatusOr<uint64_t> read_reg_status = rv_top->ReadRegister(reg_name);
+
+  if (std::string(name) == "pc") {
+    *value = g_mpact_handle->get_pc();
+    return 0;
+  }
+
+  auto read_reg_status = g_mpact_handle->simulator()->ReadRegister(name);
   if (!read_reg_status.ok()) {
-    LOG(ERROR) << "[DPI] mpact_get_register: Failed to read register: "
-               << reg_name;
+    LOG(ERROR) << "[DPI] mpact_get_register: Failed to read register: " << name;
     return -4;
   }
   // CoralNPU V2 is a 32bit system. RiscVTop::ReadRegister outputs 64bit values
@@ -400,16 +318,29 @@ int mpact_set_register(const char* name, uint32_t value) {
   if (!g_mpact_handle->is_initialized()) {
     LOG(INFO) << "[DPI] mpact_set_register: Lazy initialization of "
                  "g_mpact_handle.";
-    g_mpact_handle->Init(nullptr);
+    if (!g_mpact_handle->Init(nullptr)) {
+      return -1;
+    }
   }
-  std::string reg_name(name);
-  RiscVTop* rv_top = g_mpact_handle->rv_top();
-  absl::Status write_reg_status = rv_top->WriteRegister(reg_name, value);
+
+  auto write_reg_status =
+      g_mpact_handle->simulator()->WriteRegister(name, value);
   if (!write_reg_status.ok()) {
     LOG(ERROR) << "[DPI] mpact_set_register: Failed to write register: "
-               << reg_name;
+               << name;
     return -4;
   }
+  return 0;
+}
+
+int mpact_get_architecture(coralnpu_architecture_t* architecture) {
+  if (g_mpact_handle == nullptr) {
+    return -1;
+  }
+  if (architecture == nullptr) {
+    return -1;
+  }
+  *architecture = g_mpact_handle->architecture();
   return 0;
 }
 
@@ -422,3 +353,5 @@ int mpact_fini() {
   g_mpact_handle = nullptr;
   return 0;
 }
+
+}  // extern "C"

@@ -14,8 +14,8 @@
 
 # Build rules for CoralNPU simulator code.
 load("@com_google_mpact-sim//mpact/sim/decoder:mpact_sim_isa.bzl", "mpact_bin_fmt_decoder", "mpact_isa_decoder")
-
-
+# load("@rules_cc//cc:defs.bzl", "cc_binary")
+# load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -266,6 +266,20 @@ mpact_bin_fmt_decoder(
 )
 
 cc_library(
+    name = "coralnpu_v2_encoding_template",
+    hdrs = ["coralnpu_v2_encoding_template.h"],
+    deps = [
+        ":coralnpu_v2_getters",
+        ":coralnpu_v2_state",
+        "@com_google_absl//absl/base:nullability",
+        "@com_google_absl//absl/container:flat_hash_map",
+        "@com_google_absl//absl/functional:any_invocable",
+        "@com_google_mpact-riscv//riscv:riscv_encoding_common",
+        "@com_google_mpact-sim//mpact/sim/generic:core",
+    ],
+)
+
+cc_library(
     name = "coralnpu_v2_user_decoder",
     srcs = [
         "coralnpu_v2_encoding.cc",
@@ -280,13 +294,10 @@ cc_library(
     ],
     deps = [
         ":coralnpu_v2_bin_fmt",
-        ":coralnpu_v2_getters",
+        ":coralnpu_v2_encoding_template",
         ":coralnpu_v2_isa",
         ":coralnpu_v2_state",
         "@com_google_absl//absl/base:nullability",
-        "@com_google_absl//absl/container:flat_hash_map",
-        "@com_google_absl//absl/functional:any_invocable",
-        "@com_google_mpact-riscv//riscv:riscv_encoding_common",
         "@com_google_mpact-riscv//riscv:riscv_generic_decoder",
         "@com_google_mpact-riscv//riscv:riscv_state",
         "@com_google_mpact-sim//mpact/sim/generic:arch_state",
@@ -301,6 +312,7 @@ cc_library(
 cc_library(
     name = "coralnpu_v2_getters",
     hdrs = ["coralnpu_v2_getters.h"],
+    copts = ["-O3"],
     deps = [
         "@com_google_absl//absl/base:nullability",
         "@com_google_absl//absl/container:flat_hash_map",
@@ -327,8 +339,10 @@ cc_library(
     deps = [
         ":coralnpu_v2_state",
         "@com_google_absl//absl/base:nullability",
+        "@com_google_absl//absl/types:span",
         "@com_google_mpact-riscv//riscv:riscv_g",
         "@com_google_mpact-riscv//riscv:riscv_state",
+        "@com_google_mpact-riscv//riscv:riscv_v",
         "@com_google_mpact-sim//mpact/sim/generic:core",
         "@com_google_mpact-sim//mpact/sim/generic:instruction",
         "@com_google_mpact-sim//mpact/sim/generic:type_helpers",
@@ -336,11 +350,18 @@ cc_library(
 )
 
 cc_library(
-    name = "coralnpu_v2_simulator",
-    srcs = ["coralnpu_v2_simulator.cc"],
-    hdrs = ["coralnpu_v2_simulator.h"],
+    name = "coralnpu_architecture",
+    hdrs = ["coralnpu_architecture.h"],
+)
+
+cc_library(
+    name = "coralnpu_simulator",
+    srcs = ["coralnpu_simulator.cc"],
+    hdrs = ["coralnpu_simulator.h"],
     copts = ["-O3"],
     deps = [
+        ":coralnpu_architecture",
+        ":coralnpu_m3_user_decoder",
         ":coralnpu_v2_state",
         ":coralnpu_v2_user_decoder",
         "@com_github_serge1_elfio//:elfio",
@@ -369,7 +390,87 @@ cc_binary(
     srcs = ["coralnpu_v2_sim.cc"],
     copts = ["-O3"],
     deps = [
-        ":coralnpu_v2_simulator",
+        ":coralnpu_simulator",
+        ":coralnpu_v2_state",
+        "@com_google_absl//absl/flags:flag",
+        "@com_google_absl//absl/flags:marshalling",
+        "@com_google_absl//absl/flags:parse",
+        "@com_google_absl//absl/flags:usage",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:initialize",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:str_format",
+        "@com_google_absl//absl/strings:string_view",
+        "@com_google_absl//absl/time",
+        "@com_google_mpact-sim//mpact/sim/generic:type_helpers",
+    ],
+)
+
+mpact_isa_decoder(
+    name = "coralnpu_m3_isa",
+    src = "coralnpu_m3.isa",
+    includes = [
+        "coralnpu_v2.isa",
+    ],
+    isa_name = "CoralNPUM3",
+    deps = [
+        ":coralnpu_v2_instructions",
+        ":coralnpu_v2_isa",
+        "@com_google_absl//absl/functional:bind_front",
+        "@com_google_mpact-riscv//riscv:riscv_bitmanip_instructions",
+        "@com_google_mpact-riscv//riscv:riscv_g",
+        "@com_google_mpact-riscv//riscv:riscv_v",
+    ],
+)
+
+mpact_bin_fmt_decoder(
+    name = "coralnpu_m3_bin_fmt",
+    src = "coralnpu_m3.bin_fmt",
+    decoder_name = "CoralNPUM3",
+    includes = [
+        "coralnpu_m3_decoder.h",
+        "coralnpu_v2.bin_fmt",
+    ],
+    deps = [
+        ":coralnpu_m3_isa",
+        ":coralnpu_v2_bin_fmt",
+    ],
+)
+
+cc_library(
+    name = "coralnpu_m3_user_decoder",
+    srcs = [
+        "coralnpu_m3_encoding.cc",
+        "coralnpu_m3_user_decoder.cc",
+    ],
+    hdrs = [
+        "coralnpu_m3_encoding.h",
+        "coralnpu_m3_user_decoder.h",
+    ],
+    copts = ["-O3"],
+    deps = [
+        ":coralnpu_m3_bin_fmt",
+        ":coralnpu_m3_isa",
+        ":coralnpu_v2_encoding_template",
+        ":coralnpu_v2_state",
+        "@com_google_absl//absl/base:nullability",
+        "@com_google_mpact-riscv//riscv:riscv_generic_decoder",
+        "@com_google_mpact-riscv//riscv:riscv_state",
+        "@com_google_mpact-sim//mpact/sim/generic:arch_state",
+        "@com_google_mpact-sim//mpact/sim/generic:core",
+        "@com_google_mpact-sim//mpact/sim/generic:instruction",
+        "@com_google_mpact-sim//mpact/sim/generic:program_error",
+        "@com_google_mpact-sim//mpact/sim/util/memory",
+    ],
+)
+
+cc_binary(
+    name = "coralnpu_m3_sim",
+    srcs = ["coralnpu_m3_sim.cc"],
+    copts = ["-O3"],
+    deps = [
+        ":coralnpu_architecture",
+        ":coralnpu_simulator",
         ":coralnpu_v2_state",
         "@com_google_absl//absl/flags:flag",
         "@com_google_absl//absl/flags:marshalling",

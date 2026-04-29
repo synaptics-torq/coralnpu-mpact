@@ -1,4 +1,4 @@
-// Copyright 2023 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@
 #include <string>
 #include <vector>
 
+#include "sim/coralnpu_architecture.h"
 #include "sim/coralnpu_simulator.h"
 #include "sim/coralnpu_v2_state.h"
 #include "absl/flags/flag.h"
@@ -36,6 +37,7 @@
 #include "absl/time/time.h"
 #include "mpact/sim/generic/type_helpers.h"
 
+using ::coralnpu::sim::Architecture;
 using ::coralnpu::sim::CoralNPUSimulator;
 using ::coralnpu::sim::CoralNPUSimulatorOptions;
 using ::mpact::sim::generic::operator*;  // NOLINT: clang-tidy false positive.
@@ -77,7 +79,9 @@ static void sim_sigint_handler(int arg) {
 
 int main(int argc, char** argv) {
   absl::InitializeLog();
-  absl::SetProgramUsageMessage("CoralNPUV2 MPACT-Sim based CLI tool");
+  absl::SetProgramUsageMessage(
+      "CoralNPU M3 Instruction Set Simulator.\n"
+      "Usage: coralnpu_m3_sim [options] <elf_file>");
   auto out_args = absl::ParseCommandLine(argc, argv);
   argc = out_args.size();
   argv = &out_args[0];
@@ -88,6 +92,7 @@ int main(int argc, char** argv) {
   std::string file_name = argv[1];
 
   CoralNPUSimulatorOptions options;
+  options.architecture = Architecture::kM3;
   options.initial_misa_value = absl::GetFlag(FLAGS_initial_misa_value);
   options.exit_on_ebreak = absl::GetFlag(FLAGS_exit_on_ebreak);
   options.memory_regions.clear();
@@ -95,7 +100,7 @@ int main(int argc, char** argv) {
 
   for (const std::string& region_str :
        absl::GetFlag(FLAGS_allow_memory_region)) {
-    std::vector<std::string> parts = absl::StrSplit(region_str, ':');
+    std::vector<absl::string_view> parts = absl::StrSplit(region_str, ':');
     if (parts.size() != 3) {
       LOG(ERROR) << "Invalid memory region: " << region_str << ". The expected "
                  << "format is start_address:length:rwx.";
@@ -158,11 +163,14 @@ int main(int argc, char** argv) {
     auto t0 = absl::Now();
     absl::Status run_status = simulator.Run();
     if (!run_status.ok()) {
-      LOG(ERROR) << run_status.message();
+      LOG(ERROR) << "Error during simulation run: " << run_status.message();
+      return -1;
     }
     absl::Status wait_status = simulator.Wait();
     if (!wait_status.ok()) {
-      LOG(ERROR) << wait_status.message();
+      LOG(ERROR) << "Error while waiting for simulation: "
+                 << wait_status.message();
+      return -1;
     }
     auto sec = absl::ToDoubleSeconds(absl::Now() - t0);
     std::cout << "Total cycles: " << simulator.GetCycleCount() << '\n';

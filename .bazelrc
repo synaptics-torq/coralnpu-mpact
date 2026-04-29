@@ -1,5 +1,5 @@
 # Build configurations for the project
-build --action_env=BAZEL_CXXOPTS="-std=c++17"
+build --action_env=BAZEL_CXXOPTS="-std=c++20"
 build --action_env=CC="clang"
 # Disable warnings we don't care about or that generally have a low signal/noise
 # ratio.

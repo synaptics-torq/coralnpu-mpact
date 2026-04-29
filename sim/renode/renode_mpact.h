@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef LEARNING_BRAIN_RESEARCH_KELVIN_SIM_RENODE_RENODE_MPACT_H_
-#define LEARNING_BRAIN_RESEARCH_KELVIN_SIM_RENODE_RENODE_MPACT_H_
+#ifndef SIM_RENODE_RENODE_MPACT_H_
+#define SIM_RENODE_RENODE_MPACT_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -134,4 +134,4 @@ class RenodeAgent {
 
 }  // namespace coralnpu::sim::renode
 
-#endif  // LEARNING_BRAIN_RESEARCH_KELVIN_SIM_RENODE_RENODE_MPACT_H_
+#endif  // SIM_RENODE_RENODE_MPACT_H_

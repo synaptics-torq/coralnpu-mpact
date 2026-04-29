@@ -34,11 +34,7 @@ decoder CoralNPUV2 {
   };
 };
 
-
-//                     files.
 instruction group RiscVIInst32 = {RiscVIInstBase32, RiscVIHints32};
-
-
 
 
 format Inst32Format[32] {

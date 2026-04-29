@@ -21,17 +21,19 @@
 // Note: This interface is designed for a single simulator instance and is not
 // thread-safe.
 
-#ifndef LEARNING_BRAIN_RESEARCH_KELVIN_SIM_COSIM_CORALNPU_COSIM_DPI_H_
-#define LEARNING_BRAIN_RESEARCH_KELVIN_SIM_COSIM_CORALNPU_COSIM_DPI_H_
+#ifndef SIM_COSIM_CORALNPU_COSIM_DPI_H_
+#define SIM_COSIM_CORALNPU_COSIM_DPI_H_
 
 #include <cstdint>
 
+#include "sim/coralnpu_architecture.h"
 #include "external/svdpi_h_file/file/svdpi.h"
 
 typedef struct {
   uint32_t itcm_start_address;  // Start address of the ITCM range.
   uint32_t itcm_length;         // Length of the ITCM range.
   uint32_t initial_misa_value;  // Initial value of the misa register.
+  coralnpu_architecture_t architecture;
 } sim_config_t;
 
 #ifdef __cplusplus
@@ -46,7 +48,7 @@ int mpact_init();
 // Configure the MPACT simulator. This function should be called after
 // mpact_init. If not called, the default configuration is used.
 // Return 0 on success, non-zero on failure.
-int mpact_config(sim_config_t* config_data);
+int mpact_config(const sim_config_t* config);
 
 // Configure the MPACT simulator to allow LOAD/STORE access to a memory range.
 // Return 0 on success, non-zero on failure.
@@ -87,6 +89,10 @@ int mpact_set_register(const char* name, uint32_t value);
 // The register value is returned in the svLogicVecVal argument.
 int mpact_get_vector_register(const char* name, svLogicVecVal* value);
 
+// Return the configured architecture of the simulator.
+// Returns 0 on success, non-zero on failure.
+int mpact_get_architecture(coralnpu_architecture_t* architecture);
+
 // Finalize and clean up MPACT simulator resources.
 // Return 0 on success, non-zero on failure.
 int mpact_fini();
@@ -95,4 +101,4 @@ int mpact_fini();
 }  // extern "C"
 #endif
 
-#endif  // LEARNING_BRAIN_RESEARCH_KELVIN_SIM_COSIM_CORALNPU_COSIM_DPI_H_
+#endif  // SIM_COSIM_CORALNPU_COSIM_DPI_H_

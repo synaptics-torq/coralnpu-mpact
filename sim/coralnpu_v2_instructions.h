@@ -118,6 +118,139 @@ void CoralNPUV2Jal(const Instruction* /*absl_nonnull*/ instruction);
 // Destination operand 1: scalar register containing the return address.
 void CoralNPUV2Jalr(const Instruction* /*absl_nonnull*/ instruction);
 
+// Semantic function for strided vector loads (vle8.v, vlse8.v, vle8ff.v, etc).
+// Validates all computed element addresses against valid memory ranges before
+// performing the load. If an invalid access is detected, it triggers a trap.
+// Source operand 0: base address.
+// Source operand 1: stride (in bytes).
+// Source operand 2: vector mask.
+void CoralNPUV2VlStrided(int element_width,
+                         const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for vector mask loads (vlm.v).
+// Validates all computed byte addresses against valid memory ranges before
+// performing the load. If an invalid access is detected, it triggers a trap.
+// Source operand 0: base address.
+void CoralNPUV2Vlm(const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for vector register loads (vl1re8.v, vl2re16.v, etc).
+// Validates all computed byte addresses against valid memory ranges before
+// performing the load. If an invalid access is detected, it triggers a trap.
+// Source operand 0: base address.
+void CoralNPUV2VlRegister(int num_regs, int element_width_bytes,
+                          const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for vector indexed loads (vluxei8.v, vluxei16.v, etc).
+// Validates all computed element addresses against valid memory ranges before
+// performing the load. If an invalid access is detected, it triggers a trap.
+// Source operand 0: base address.
+// Source operand 1: index vector operand.
+// Source operand 2: vector mask.
+void CoralNPUV2VlIndexed(int index_width,
+                         const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for unit-stride vector segment loads (vlseg2e8.v, etc).
+// Validates all computed element addresses across all segments against valid
+// memory ranges before performing the load. If an invalid access is detected,
+// it triggers a trap.
+// Source operand 0: base address.
+// Source operand 1: vector mask.
+// Source operand 2: number of fields - 1 (nf).
+void CoralNPUV2VlSegment(int element_width,
+                         const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for strided vector segment loads (vlsseg2e8.v, etc).
+// Validates all computed element addresses across all segments against valid
+// memory ranges before performing the load. If an invalid access is detected,
+// it triggers a trap.
+// Source operand 0: base address.
+// Source operand 1: segment stride (in bytes).
+// Source operand 2: vector mask.
+// Source operand 3: number of fields - 1 (nf).
+void CoralNPUV2VlSegmentStrided(int element_width,
+                                const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for indexed vector segment loads (vluxseg2ei8.v, etc).
+// Validates all computed element addresses across all segments against valid
+// memory ranges before performing the load. If an invalid access is detected,
+// it triggers a trap.
+// Source operand 0: base address.
+// Source operand 1: index vector operand.
+// Source operand 2: vector mask.
+// Source operand 3: number of fields - 1 (nf).
+void CoralNPUV2VlSegmentIndexed(int index_width,
+                                const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for vector mask stores (vsm.v).
+// Validates all computed byte addresses against valid memory ranges before
+// performing the store. If an invalid access is detected, it triggers a trap.
+// Source operand 0: vector mask source.
+// Source operand 1: base address.
+void CoralNPUV2Vsm(const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for strided vector stores (vse8.v, vsse8.v, etc).
+// Validates all computed element addresses against valid memory ranges before
+// performing the store. If an invalid access is detected, it triggers a trap.
+// Source operand 0: vector source.
+// Source operand 1: base address.
+// Source operand 2: stride (in bytes).
+// Source operand 3: vector mask.
+void CoralNPUV2VsStrided(int element_width,
+                         const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for vector register stores (vs1re8.v, vs2re16.v, etc).
+// Validates all computed byte addresses against valid memory ranges before
+// performing the store. If an invalid access is detected, it triggers a trap.
+// Source operand 0: vector register source.
+// Source operand 1: base address.
+void CoralNPUV2VsRegister(int num_regs,
+                          const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for vector indexed stores (vsuxei8.v, vsoxei16.v, etc).
+// Validates all computed element addresses against valid memory ranges before
+// performing the store. If an invalid access is detected, it triggers a trap.
+// Source operand 0: vector source.
+// Source operand 1: base address.
+// Source operand 2: index vector operand.
+// Source operand 3: vector mask.
+void CoralNPUV2VsIndexed(int index_width,
+                         const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for unit-stride vector segment stores (vsseg2e8.v, etc).
+// Validates all computed element addresses across all segments against valid
+// memory ranges before performing the store. If an invalid access is detected,
+// it triggers a trap.
+// Source operand 0: vector source.
+// Source operand 1: base address.
+// Source operand 2: vector mask.
+// Source operand 3: number of fields - 1 (nf).
+void CoralNPUV2VsSegment(int element_width,
+                         const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for strided vector segment stores (vssseg2e8.v, etc).
+// Validates all computed element addresses across all segments against valid
+// memory ranges before performing the store. If an invalid access is detected,
+// it triggers a trap.
+// Source operand 0: vector source.
+// Source operand 1: base address.
+// Source operand 2: segment stride (in bytes).
+// Source operand 3: vector mask.
+// Source operand 4: number of fields - 1 (nf).
+void CoralNPUV2VsSegmentStrided(int element_width,
+                                const Instruction* /*absl_nonnull*/ instruction);
+
+// Semantic function for indexed vector segment stores (vsuxseg2ei8.v, etc).
+// Validates all computed element addresses across all segments against valid
+// memory ranges before performing the store. If an invalid access is detected,
+// it triggers a trap.
+// Source operand 0: vector source.
+// Source operand 1: base address.
+// Source operand 2: index vector operand.
+// Source operand 3: vector mask.
+// Source operand 4: number of fields - 1 (nf).
+void CoralNPUV2VsSegmentIndexed(int index_width,
+                                const Instruction* /*absl_nonnull*/ instruction);
+
 }  // namespace coralnpu::sim
 
 #endif  // SIM_CORALNPU_V2_INSTRUCTIONS_H_

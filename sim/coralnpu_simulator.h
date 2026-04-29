@@ -1,4 +1,4 @@
-// Copyright 2025 Google LLC
+// Copyright 2026 Google LLC
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef SIM_CORALNPU_V2_SIMULATOR_H_
-#define SIM_CORALNPU_V2_SIMULATOR_H_
+#ifndef SIM_CORALNPU_SIMULATOR_H_
+#define SIM_CORALNPU_SIMULATOR_H_
 
 #include <cstddef>
 #include <cstdint>
@@ -22,9 +22,11 @@
 #include <string>
 #include <vector>
 
+#include "sim/coralnpu_architecture.h"
 #include "sim/coralnpu_v2_state.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "riscv/riscv32_htif_semihost.h"
 #include "riscv/riscv_fp_state.h"
 #include "riscv/riscv_top.h"
 #include "riscv/riscv_vector_state.h"
@@ -41,8 +43,11 @@ class RiscV32HtifSemiHost;
 
 namespace coralnpu::sim {
 
-struct CoralNPUV2SimulatorOptions {
+struct CoralNPUSimulatorOptions {
+  Architecture architecture = Architecture::kV2;
   uint32_t initial_misa_value = 0x40201120;
+  uint32_t itcm_start_address = 0x0;
+  uint32_t itcm_length = 0x2000;
   bool exit_on_ebreak = false;
   std::vector<CoralNPUV2MemoryRegion> memory_regions = {
       {.start_address = kCoralNPUV2DefaultItcmStartAddress,
@@ -55,14 +60,19 @@ struct CoralNPUV2SimulatorOptions {
        .length = kCoralNPUV2DefaultExtmemLength,
        .permissions = MemoryPermission::kReadWrite}};
   bool semihost_htif = false;
+  bool skip_default_handlers = false;
 };
 
-class CoralNPUV2Simulator {
+class CoralNPUSimulator {
  public:
   using HaltReason = ::mpact::sim::generic::CoreDebugInterface::HaltReason;
 
-  explicit CoralNPUV2Simulator(const CoralNPUV2SimulatorOptions& options);
-  ~CoralNPUV2Simulator();
+  explicit CoralNPUSimulator(const CoralNPUSimulatorOptions& options);
+  ~CoralNPUSimulator();
+
+  static std::optional<
+      mpact::sim::riscv::RiscV32HtifSemiHost::SemiHostAddresses>
+  GetHtifMagicAddresses(mpact::sim::util::ElfProgramLoader* loader);
 
   // Loads the program from the given ELF file.
   // If entry_point is provided, it overrides the ELF entry point.
@@ -108,6 +118,9 @@ class CoralNPUV2Simulator {
   mpact::sim::riscv::RiscVTop* top() const { return top_.get(); }
   mpact::sim::util::MemoryInterface* memory() const { return memory_.get(); }
   CoralNPUV2State* state() const { return state_.get(); }
+  mpact::sim::generic::DecoderInterface* decoder() const {
+    return decoder_.get();
+  }
 
  private:
   std::unique_ptr<mpact::sim::util::MemoryInterface> memory_;
@@ -120,9 +133,9 @@ class CoralNPUV2Simulator {
   std::unique_ptr<mpact::sim::util::ElfProgramLoader> elf_loader_;
   std::unique_ptr<mpact::sim::riscv::RiscV32HtifSemiHost> htif_semihost_;
 
-  CoralNPUV2SimulatorOptions options_;
+  CoralNPUSimulatorOptions options_;
 };
 
 }  // namespace coralnpu::sim
 
-#endif  // SIM_CORALNPU_V2_SIMULATOR_H_
+#endif  // SIM_CORALNPU_SIMULATOR_H_

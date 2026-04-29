@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-#ifndef LEARNING_BRAIN_RESEARCH_KELVIN_SIM_RENODE_RENODE_DEBUG_INTERFACE_H_
-#define LEARNING_BRAIN_RESEARCH_KELVIN_SIM_RENODE_RENODE_DEBUG_INTERFACE_H_
+#ifndef SIM_RENODE_RENODE_DEBUG_INTERFACE_H_
+#define SIM_RENODE_RENODE_DEBUG_INTERFACE_H_
 
 #include <cstdint>
 #include <string>
@@ -58,4 +58,4 @@ class RenodeDebugInterface : public mpact::sim::generic::CoreDebugInterface {
 
 }  // namespace coralnpu::sim::renode
 
-#endif  // LEARNING_BRAIN_RESEARCH_KELVIN_SIM_RENODE_RENODE_DEBUG_INTERFACE_H_
+#endif  // SIM_RENODE_RENODE_DEBUG_INTERFACE_H_

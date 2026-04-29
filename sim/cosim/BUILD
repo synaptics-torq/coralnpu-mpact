@@ -15,8 +15,8 @@
 # This BUILD file defines the co-simulation library that bridges the
 # UVM testbench with the MPACT-Sim model.
 
-
-
+# load("@rules_cc//cc:defs.bzl", "cc_binary")
+# load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@cc_static_library_external//file:cc_static_libarary.bzl", "cc_static_library")
 
 package(
@@ -34,23 +34,15 @@ cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "//sim:coralnpu_architecture",
+        "//sim:coralnpu_simulator",
         "//sim:coralnpu_v2_state",
-        "//sim:coralnpu_v2_user_decoder",
-        "@com_google_absl//absl/base:nullability",
         "@com_google_absl//absl/log",
         "@com_google_absl//absl/log:check",
         "@com_google_absl//absl/status",
-        "@com_google_absl//absl/strings",
         "@com_google_absl//absl/types:span",
-        "@com_google_mpact-riscv//riscv:riscv_fp_state",
-        "@com_google_mpact-riscv//riscv:riscv_state",
-        "@com_google_mpact-riscv//riscv:riscv_top",
         "@com_google_mpact-sim//mpact/sim/generic:core",
-        "@com_google_mpact-sim//mpact/sim/generic:core_debug_interface",
-        "@com_google_mpact-sim//mpact/sim/generic:instruction",
-        "@com_google_mpact-sim//mpact/sim/generic:type_helpers",
-        "@com_google_mpact-sim//mpact/sim/util/memory",
-        "@com_google_mpact-sim//mpact/sim/util/program_loader:elf_loader",
+        # INTERNAL_VERILATOR_DEPENDENCY,
     ],
     alwayslink = True,
 )

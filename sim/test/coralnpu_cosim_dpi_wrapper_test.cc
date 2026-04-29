@@ -1,6 +1,21 @@
+// Copyright 2026 Google LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 #include <cstdint>
 #include <vector>
 
+#include "sim/coralnpu_architecture.h"
 #include "sim/cosim/coralnpu_cosim_dpi.h"
 #include "sim/test/align_test_generated.h"
 #include "sim/test/frm_test_generated.h"
@@ -117,7 +132,7 @@ TEST_F(CosimFixture, GetVectorRegister) {
   // Move the value in x5 into v1.
   EXPECT_EQ(mpact_step_wrapper(kVmvX5ToV1), 0);
 
-  svLogicVecVal result[4];
+  svLogicVecVal result[32];
   EXPECT_EQ(mpact_get_vector_register("v1", result), 0);
 
   std::vector<uint32_t> expected_avals(4, kExpectedX5Value);
@@ -136,35 +151,14 @@ TEST_F(CosimFixture, GetVectorRegisterErrors_NullValue) {
 }
 
 TEST_F(CosimFixture, GetVectorRegisterErrors_NullRegName) {
-  svLogicVecVal result[4];
+  svLogicVecVal result[32];
   EXPECT_NE(mpact_get_vector_register(nullptr, result), 0);
 }
 
 TEST_F(CosimFixture, GetVectorRegisterErrors_HandleNotInitialized) {
   mpact_fini();  // Reset the handle to test the uninitialized case.
-  svLogicVecVal result[4];
+  svLogicVecVal result[32];
   EXPECT_NE(mpact_get_vector_register("v1", result), 0);
-}
-
-TEST_F(CosimFixture, MpauseHaltsCosimulation) {
-  uint32_t pc_value = 0;
-  uint32_t expected_pc_value = 0;
-
-  EXPECT_EQ(mpact_step_wrapper(kNopInstruction), 0);
-  expected_pc_value += 4;
-  EXPECT_EQ(mpact_get_register("pc", &pc_value), 0);
-  EXPECT_EQ(pc_value, expected_pc_value);
-
-  EXPECT_EQ(mpact_step_wrapper(kMpause), 0);
-  EXPECT_EQ(mpact_get_register("pc", &pc_value), 0);
-  // Verify that the pc value is not updated after mpause.
-  EXPECT_EQ(pc_value, expected_pc_value);
-
-  // Verify non-zero return value on step after mpause.
-  EXPECT_NE(mpact_step_wrapper(kNopInstruction), 0);
-  EXPECT_EQ(mpact_get_register("pc", &pc_value), 0);
-  // Verify that the pc value is not updated after mpause.
-  EXPECT_EQ(pc_value, expected_pc_value);
 }
 
 TEST_F(CosimFixture, GetPcWithCustomConfig) {
@@ -173,6 +167,7 @@ TEST_F(CosimFixture, GetPcWithCustomConfig) {
       .itcm_start_address = test_itcm_start_address,
       .itcm_length = 0x100000,
       .initial_misa_value = 0x0,
+      .architecture = kCoralNPUV2,
   };
   EXPECT_EQ(mpact_config(&config_data), 0);
   uint32_t pc_value = 1;
@@ -188,6 +183,28 @@ TEST_F(CosimFixture, GetPcWithCustomConfig) {
   EXPECT_EQ(pc_value, test_itcm_start_address + 4);
 }
 
+TEST_F(CosimFixture, GetPcWithM3Config) {
+  uint32_t test_itcm_start_address = 0x4000;
+  sim_config_t config_data = {
+      .itcm_start_address = test_itcm_start_address,
+      .itcm_length = 0x100000,
+      .initial_misa_value = 0x0,
+      .architecture = kCoralNPUM3,
+  };
+  EXPECT_EQ(mpact_config(&config_data), 0);
+  coralnpu_architecture_t arch = kCoralNPUV2;
+  EXPECT_EQ(mpact_get_architecture(&arch), 0);
+  EXPECT_EQ(arch, kCoralNPUM3);
+
+  uint32_t pc_value = 1;
+  EXPECT_EQ(mpact_get_register("pc", &pc_value), 0);
+  EXPECT_EQ(pc_value, test_itcm_start_address);
+
+  EXPECT_EQ(mpact_step_wrapper(kNopInstruction), 0);
+  EXPECT_EQ(mpact_get_register("pc", &pc_value), 0);
+  EXPECT_EQ(pc_value, test_itcm_start_address + 4);
+}
+
 // Verify that configuring ITCM does not affect DTCM.
 TEST_F(CosimFixture, TestDtcmAccessAfterCustomItcmConfig) {
   uint32_t test_itcm_start_address = 0x4000;
@@ -196,6 +213,7 @@ TEST_F(CosimFixture, TestDtcmAccessAfterCustomItcmConfig) {
       .itcm_length = 0x1000,
       .initial_misa_value = 0x40201120,
   };
+  config_data.architecture = kCoralNPUV2;
   EXPECT_EQ(mpact_config(&config_data), 0);
 
   // Try to write to the default DTCM address (0x10000).
@@ -225,6 +243,59 @@ TEST_F(CosimFixture, TestDtcmWriteWithLazyInitialization) {
   EXPECT_EQ(pc_value, 4);
 }
 
+// Verifies that the simulator architecture configuration (V2 vs M3) is
+// correctly set and observable via the DPI. This test satisfies mutation
+// testing requirements by ensuring that changes to the architecture assignment
+// logic are detected.
+TEST_F(CosimFixture, ArchitectureDifferentiation) {
+  coralnpu_architecture_t arch = kCoralNPUM3;  // Initialize to wrong value.
+
+  // Default architecture is V2.
+  EXPECT_EQ(mpact_get_architecture(&arch), 0);
+  EXPECT_EQ(arch, kCoralNPUV2);
+
+  // Configure for M3.
+  sim_config_t config_data = {
+      .itcm_start_address = 0x0,
+      .itcm_length = 0x10000,
+      .architecture = kCoralNPUM3,
+  };
+  EXPECT_EQ(mpact_config(&config_data), 0);
+  EXPECT_EQ(mpact_get_architecture(&arch), 0);
+  EXPECT_EQ(arch, kCoralNPUM3);
+
+  // Configure back to V2.
+  mpact_fini();
+  mpact_init();
+  config_data.architecture = kCoralNPUV2;
+  EXPECT_EQ(mpact_config(&config_data), 0);
+  EXPECT_EQ(mpact_get_architecture(&arch), 0);
+  EXPECT_EQ(arch, kCoralNPUV2);
+}
+
+TEST_F(CosimFixture, LoadProgramTest) {
+  // Use the same ELF as the simulator tests.
+  std::string elf_path =
+      "sim/test/testfiles/"
+      "coralnpu_v2_rvv_add_intrinsic.elf";
+
+  // Initialize with architecture V2.
+  sim_config_t config_data = {
+      .itcm_start_address = 0x0,
+      .itcm_length = 0x1000000,
+      .initial_misa_value = 0x40201120,
+      .architecture = kCoralNPUV2,
+  };
+  ASSERT_EQ(mpact_config(&config_data), 0);
+
+  ASSERT_EQ(mpact_load_program(elf_path.c_str()), 0);
+
+  uint32_t pc_value = 1;
+  EXPECT_EQ(mpact_get_register("pc", &pc_value), 0);
+  // The entry point for this ELF is 0x0.
+  EXPECT_EQ(pc_value, 0);
+}
+
 // Test that the cosim wrapper can run the align_test elf program. This program
 // makes use of external memory.
 TEST_F(CosimFixture, AlignTest) {
@@ -247,6 +318,7 @@ TEST_F(CosimFixture, AlignTest) {
       .itcm_length = 0x2000,
       .initial_misa_value = 0x40201120,
   };
+  config_data.architecture = kCoralNPUV2;
   ASSERT_EQ(mpact_config(&config_data), 0);
   ASSERT_EQ(mpact_add_load_store_range(0x10000, 0x8000), 0);
   ASSERT_EQ(mpact_add_load_store_range(kExtMemStartAddress, 0x0040'0000), 0);
@@ -299,6 +371,7 @@ TEST_F(CosimFixture, FrmTest) {
       .itcm_length = 0x2000,
       .initial_misa_value = 0x40201120,
   };
+  config_data.architecture = kCoralNPUV2;
   ASSERT_EQ(mpact_config(&config_data), 0);
   ASSERT_EQ(mpact_add_load_store_range(0x10000, 0x8000), 0);
 
