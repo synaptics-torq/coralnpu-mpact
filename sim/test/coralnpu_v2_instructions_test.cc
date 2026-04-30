@@ -1191,7 +1191,7 @@ TEST_F(CoralNPUV2InstructionTest, Jal_InvalidTarget_CheckEpc) {
   inst->Execute(/*context=*/nullptr);
 
   EXPECT_TRUE(was_trap_handler_called_);
-  EXPECT_EQ(epc_, inst_address);
+  EXPECT_EQ(epc_, inst_address + offset);
 }
 
 // Verifies that Jalr traps to the correct EPC for an invalid target.
@@ -1204,7 +1204,7 @@ TEST_F(CoralNPUV2InstructionTest, Jalr_InvalidTarget_CheckEpc) {
   inst->Execute(/*context=*/nullptr);
 
   EXPECT_TRUE(was_trap_handler_called_);
-  EXPECT_EQ(epc_, inst_address);
+  EXPECT_EQ(epc_, kItcmLength + offset);
 }
 
 TEST_F(CoralNPUV2InstructionTest, VlUnitStride_UnmaskedValidAddress_Succeeds) {

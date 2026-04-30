@@ -81,7 +81,7 @@ bool IsJumpAllowed(uint64_t address,
                             MemoryPermission::kExecute)) {
     state->Trap(/*is_interrupt=*/false, /*trap_value=*/address,
                 *fault_exception_code,
-                /*epc=*/instruction->address(), instruction);
+                /*epc=*/address, instruction);
     return false;
   }
   return true;
