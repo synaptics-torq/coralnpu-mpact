@@ -100,6 +100,8 @@ class MpactSimulator final : public CoralNPUSimulator {
         rvv_state_(&rv_state_, /*vlenb*/ 16),
         rv_decoder_(&rv_state_, &router_),
         rv_top_("CoralNPUPlaceholder", &rv_state_, &rv_decoder_) {
+    rv_state_.set_rv_fp(&rv_fp_state_);
+    rv_state_.set_rv_vector(&rvv_state_);
     // Make sure the architectural and abi register aliases are added.
     std::string reg_name;
     for (int i = 0; i < 32; i++) {
