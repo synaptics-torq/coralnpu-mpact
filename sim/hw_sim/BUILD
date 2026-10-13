@@ -40,8 +40,25 @@ cc_library(
 )
 
 # generate libraries for external projects
+#
+# Only the API in coralnpu_simulator.h is exported. The library links MPACT,
+# protobuf and abseil statically; exporting them would let them collide with
+# other copies loaded in the same process (e.g. TensorFlow's protobuf, which
+# crashes in the protobuf descriptor registration at load time on macOS).
 cc_binary(
     name = "libcoralnpu_simulator_mpact.so",
+    additional_linker_inputs = [
+        "exported_symbols_linux.lds",
+        "exported_symbols_macos.txt",
+    ],
+    linkopts = select({
+        "@platforms//os:macos": [
+            "-Wl,-exported_symbols_list,$(location exported_symbols_macos.txt)",
+        ],
+        "//conditions:default": [
+            "-Wl,--version-script=$(location exported_symbols_linux.lds)",
+        ],
+    }),
     linkshared = True,
     visibility = ["//visibility:public"],
     deps = [":mpact_simulator"],
