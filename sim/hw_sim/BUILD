@@ -54,6 +54,9 @@ cc_binary(
     linkopts = select({
         "@platforms//os:macos": [
             "-Wl,-exported_symbols_list,$(location exported_symbols_macos.txt)",
+            # Bazel's default install name is the bazel-out path, which a client linking
+            # against an installed copy would record and fail to load.
+            "-Wl,-install_name,@rpath/libcoralnpu_simulator_mpact.so",
         ],
         "//conditions:default": [
             "-Wl,--version-script=$(location exported_symbols_linux.lds)",
